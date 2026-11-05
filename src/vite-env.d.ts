@@ -18,6 +18,7 @@ import type {
   EmbedVisibility,
 } from "../electron/youtube-types.cjs";
 import type { OrganizationAPI } from "../electron/organization-types.cjs";
+import type { DownloadAPI } from "../electron/download-types.cjs";
 export type ImportProgress = { completed: number; total: number } | null;
 declare global {
   interface Window {
@@ -25,6 +26,7 @@ declare global {
       getAppInfo: () => Promise<{ version: string; platform: string }>;
       openYouTube: () => Promise<void>;
       organization: OrganizationAPI;
+      downloads: DownloadAPI;
       youtube: {
         status: () => Promise<YouTubeStatus>;
         importKey: () => Promise<YouTubeStatus>;

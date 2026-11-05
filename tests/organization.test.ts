@@ -51,6 +51,7 @@ async function setup() {
 }
 const local = { kind: "local", id: randomUUID() },
   youtube = { kind: "youtube", id: "abcdefghijk" };
+const sourceKey = (source: string) => process.platform === "win32" ? source.toLowerCase() : source;
 
 describe("persistent organization", () => {
   it("upgrades a Phase 5 library and saved-link catalog without losing files, bookmarks or resume positions", async () => {
@@ -77,7 +78,7 @@ describe("persistent organization", () => {
     cleanups.push(async () => library.close());
     expect(library.getProgress(id).position).toBe(23);
     expect(library.getVideo(id).title).toBe("existing");
-    expect(library.previewCandidates()).toEqual([{ id, source }]);
+    expect(library.previewCandidates()).toEqual([{ id, source: sourceKey(source) }]);
     library.setMetadata(id, { duration: 121, error: null, thumbnail: true });
     expect(library.previewCandidates()).toEqual([]);
     library.clearThumbnail(id);
@@ -285,15 +286,15 @@ describe("bounded folder indexing", () => {
     await writeFile(path.join(nested, "story.MP4"), "x");
     await writeFile(path.join(dir, "notes.txt"), "x");
     await symlink(nested, path.join(dir, "loop"), "dir");
-    const first = await scanFolder(dir, new Set([known]));
+    const first = await scanFolder(dir, new Set([sourceKey(known)]));
     expect(first.files).toEqual([path.join(nested, "story.MP4")]);
     expect(first.limited).toBe(false);
     for (let i = 0; i < 105; i++)
       await writeFile(path.join(nested, `${i}.webm`), "x");
-    const batch = await scanFolder(dir, new Set([known]));
+    const batch = await scanFolder(dir, new Set([sourceKey(known)]));
     expect(batch.files).toHaveLength(100);
     expect(batch.limited).toBe(true);
-    const remainder = await scanFolder(dir, new Set([known, ...batch.files]));
+    const remainder = await scanFolder(dir, new Set([known, ...batch.files].map(sourceKey)));
     expect(remainder.files).toHaveLength(6);
     expect(remainder.limited).toBe(false);
   });

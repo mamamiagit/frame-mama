@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     getAppInfo: () => ipcRenderer.invoke("frame:info"),
     openYouTube: () => ipcRenderer.invoke("frame:youtube-home"),
+    downloads: Object.freeze({
+      list: () => ipcRenderer.invoke("downloads:list"),
+      add: (value: { url: string; authorized: boolean }) => ipcRenderer.invoke("downloads:add", value),
+      cancel: (id: string) => ipcRenderer.invoke("downloads:cancel", id),
+      retry: (id: string) => ipcRenderer.invoke("downloads:retry", id),
+      remove: (id: string) => ipcRenderer.invoke("downloads:remove", id),
+    }),
     organization: Object.freeze({
       list: () => ipcRenderer.invoke("organization:list"),
       create: (name: string) => ipcRenderer.invoke("organization:create", name),

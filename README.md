@@ -1,6 +1,6 @@
 # Frame · YouTube Offline
 
-A Windows-first desktop video space built with Electron, React, TypeScript, Vite, and Tailwind CSS. **Phases 1–5 and 7 have source implementations:** desktop foundation, interface, persistent local library, offline playback with resume/history, YouTube API discovery, saved links, the official online player, mixed playlists, and organization settings. Live Google API access and real YouTube playback require verification with your own key/network; automated Phase 5 tests use controlled responses. Phase 6 downloads are not implemented; Phase 7 was requested next.
+A Windows-first desktop video space built with Electron, React, TypeScript, Vite, and Tailwind CSS. **Phases 1–7 have source implementations:** desktop foundation, interface, persistent local library, offline playback with resume/history, YouTube API discovery, saved links, the official online player, authorized direct-media downloads, mixed playlists, and organization settings. Live Google API access and real YouTube playback require verification with your own key/network; automated YouTube tests use controlled responses. Phase 8 optimization and Windows release validation remain pending.
 
 ## Development
 
@@ -29,7 +29,8 @@ Behind the managed cloud environment proxy, use `NODE_USE_ENV_PROXY=1 npm ci` an
 - A real local HTML5 player with seeking, volume/mute, fullscreen/theater modes, speed, keyboard shortcuts, UTF-8 SRT/WebVTT subtitles, autoplay-next queues, persistent resume positions, and playback history.
 - Persistent saved YouTube links in Watch Later, including manual links without a key. Session-only sample bookmarks remain clearly separate.
 - Main-process API-key configuration using a native file picker and OS-encrypted storage, or an existing environment binding. Missing key, offline, quota, and API errors have explicit states.
-- Persistent mixed playlists, local Watch Later, reorder/shuffle/repeat controls, history pause/removal, playback defaults, selected-folder scans, storage accounting, and thumbnail cache management. Downloads remain a planned feature.
+- Persistent mixed playlists, local Watch Later, reorder/shuffle/repeat controls, history pause/removal, playback defaults, selected-folder scans, storage accounting, and thumbnail cache management.
+- A persistent direct-media download queue with byte progress, cancel/retry, native-selected destination folders, encrypted source links, and automatic offline-library import.
 
 ## Checks
 
@@ -43,6 +44,7 @@ npm run test:library   # real imports/thumbnails, SQLite restarts, missing files
 npm run test:playback  # real offline controls, captions, resume/restart, autoplay, errors
 npm run test:youtube   # controlled API/player responses; not a live Google/YouTube test
 npm run test:organization # playlists, settings, scans, cache, history and restart persistence
+npm run test:downloads # controlled media transfers, queue, cancel/retry, restart and library integration
 npm audit
 ```
 
@@ -78,6 +80,8 @@ electron/youtube-saved.cts Persistent saved IDs and expiring API metadata
 electron/organization.cts SQLite playlists, bookmarks, preferences and visits
 electron/organization-ipc.cts Validated organization capabilities and native dialogs
 electron/folder-scan.cts Bounded on-demand traversal of native-selected folders
+electron/download-network.cts Public HTTPS transport, DNS pinning and redirect checks
+electron/downloads.cts   Encrypted persistent queue, bounded transfers and library import
 src/queue.ts            Shuffle and repeat navigation without modifying saved order
 src/App.tsx             Navigation, page shells, interface interaction state
 src/catalog.ts          Explicitly labeled demonstration catalog + search
@@ -156,9 +160,18 @@ Relevant official references: [Data API](https://developers.google.com/youtube/v
 - Google API and embedding verification were not run live in the cloud: no key is injected there, and its custom egress allowlist currently excludes Google/YouTube. No credentials were invented or requested in chat. The user's local Windows key is intentionally not available to cloud tests.
 - Restricted environments need access to `www.googleapis.com`, `www.youtube-nocookie.com`, `www.youtube.com`, `i.ytimg.com`, and the official player/CDN dependencies (commonly `*.googlevideo.com`, `*.ytimg.com`, `*.youtube.com`, and `*.gstatic.com`). Actual domains can vary by region/consent state. Configure allowed destinations in environment settings; code cannot grant network access. Chromium API/player sessions reuse the managed proxy when provided and keep TLS verification enabled. These domains were documented, not applied or published to cloud settings.
 
-## Next: Phase 6 (not implemented)
+## Downloads (Phase 6)
 
-Add authorized direct-media downloads with queue/progress/cancel/retry and library integration. Do not download YouTube videos without an authorized download mechanism or bypass DRM, authentication, or platform restrictions. Phase 7 organization was implemented at the user’s request before Phase 6. Phase 8 covers optimization and Windows release validation.
+1. Open **Downloads → Choose download folder**, or choose **Settings → Download location**. Frame uses a native directory picker. Use NTFS or another filesystem supporting hard links; FAT/exFAT volumes are not currently supported for download publication. New queue entries capture this destination; changing the setting does not move existing files or queued jobs.
+2. Paste a **public HTTPS direct video-file URL** and confirm that you own the media or have permission to download it, then choose **Add to queue**. Supported containers are MP4, M4V, WebM, MKV, MOV, AVI, OGV and OGG, subject to the server's media type and container-header checks. Generic binary responses also need a supported extension in the submitted URL. YouTube/watch pages, streaming manifests, DRM, sign-in, cookies, custom authorization headers and nonstandard ports are not supported. Use the official player for saved YouTube links.
+3. Up to **200 queue entries** are retained. Transfers run one at a time and continue when navigating elsewhere in Frame. Progress shows transferred bytes and a percentage bar when the server supplies a size; otherwise the bar is indeterminate. Each transfer is limited to **10 GiB**, five redirects, 30 seconds of socket inactivity and two hours overall. Transfers use Node's dedicated direct HTTPS connection with certificate verification; authenticated or mandatory proxy networks are not currently supported.
+4. **Cancel** stops a queued or active transfer and removes its staging file. **Retry** restarts an unfinished transfer from byte zero; HTTP range resume is not implemented. Failed downloads do not block later entries. An expired link must be removed and added again with a fresh URL. Frame closes active transfers on normal exit; queued work resumes on the next launch. A transfer interrupted by a crash is shown as failed and can be retried. Files left during a crash are cleaned on retry or queue removal.
+5. Successful transfers are published under a unique UUID filename in the selected folder, without overwriting existing files. Frame then adds the saved file to **Offline Library**, generating metadata/thumbnails with the existing local decoder. Library import waits for an existing import/scan to finish. Codec limitations still apply; decoder warnings appear in the library. If library import fails, **Retry** imports the saved file without downloading it again. Importing entries cannot be canceled mid-import.
+6. **Remove from queue** removes a finished, failed or canceled entry and its staging file only. Completed video files and library entries are kept. Removing a video from Offline Library also keeps the downloaded file, using the existing library confirmation behavior. Manage unwanted completed files yourself in the selected folder.
+
+The queue lives in `userData/downloads.sqlite` (with SQLite WAL sidecars). Source URLs, including signed query strings, are OS-encrypted through Electron safeStorage before persistence; secure storage is required to add a download. Only display names, hostnames, state, byte counts and generic errors are returned through the fixed download IPC bridge. URLs are never sent to the YouTube API or its credential store. Every HTTPS redirect is validated; DNS results containing private, loopback or reserved addresses are rejected and connections are pinned to the validated address. This is a direct-file downloader, not a browser or a YouTube media extractor.
+
+`npm test` covers URL/address validation, DNS pinning, redirected private destinations, transfer validation, cancellation, retry, crash/restart recovery, file preservation and real SQLite library integration. `npm run test:downloads` runs the production Electron UI/IPC, real file writes, OS-encrypted queue, generated-media decoding, cancel/retry and restart persistence against test-only controlled transport responses with temporary app data. It does not establish availability of a specific live download host. Windows build/unit/UI/desktop checks were run during Phase 6; installer generation, installation, uninstallation, real-network YouTube playback and target-machine display/audio checks remain release work. Phase 8 has not been started.
 
 Appearance regression tests exercise all six colorways in both modes, saved selection, native radio keyboard navigation, invalid preference recovery, and desktop/mobile overflow. The expanded Electron playback test verifies fullscreen fading with real playing media. Windows display scaling and fullscreen appearance still need a check on the target Windows computer.
 
@@ -171,7 +184,7 @@ Appearance regression tests exercise all six colorways in both modes, saved sele
 5. **History** separates local playback from **YouTube visits**. Visits mean you opened the official player, not a verified watch or your YouTube account’s history. Online resume positions remain managed by YouTube. **Record history** pauses new local history/resume checkpoints and YouTube visits while retaining old positions. Forget removes one record and its local resume position. **Clear all history** asks for native confirmation and removes both histories and local resume positions, keeping playlists and media.
 6. **Settings → Playback defaults** saves speed, volume, mute, and ordinary-library autoplay. Player adjustments update the same defaults. Existing localStorage playback preferences migrate once into SQLite; later sessions load the stored values. Shuffle/repeat and playlist auto-advance are also saved. Appearance colorways and light/dark preferences continue to persist as before.
 7. **Settings → Library directories** selects folders using native dialogs. Choose **Scan** to index supported files recursively, skipping symlinks and existing paths. Scans process up to 100 new videos, 10,000 directory entries, and 10 levels per operation; repeat for another batch. For folders exceeding the entry/depth limits, select smaller subfolders; repeating the same traversal cannot reach beyond those limits. This is on-demand indexing, not a background watcher. Removing a directory selection keeps already indexed videos.
-8. **Storage & previews** shows indexed source sizes, thumbnail bytes/count, and metadata database/journal bytes. Source sizes are metadata snapshots, not extra copies or a full disk-usage report. **Clear previews** requires confirmation and deletes generated thumbnail files only; **Rebuild previews** regenerates up to 100 uncached, nonmissing files per batch, rotating unsuccessful files behind untried candidates. Original videos stay in place. The future download folder is persisted, but queue/download behavior remains Phase 6 work.
+8. **Storage & previews** shows indexed source sizes, thumbnail bytes/count, and metadata database/journal bytes, including the download queue database. Source sizes are metadata snapshots, not extra copies or a full disk-usage report. **Clear previews** requires confirmation and deletes generated thumbnail files only; **Rebuild previews** regenerates up to 100 uncached, nonmissing files per batch, rotating unsuccessful files behind untried candidates. Original videos stay in place. **Download location** selects the destination for new Phase 6 downloads.
 
 Playlists, local bookmarks, playback/queue settings, directory grants, and YouTube visits live in `userData/organization.sqlite`. Local video/history data and API-key storage remain in their existing locations. Close Frame before backing up the whole user-data directory. No database reset or new dependency is required. Native confirmation protects playlist deletion, history clearing, and cache clearing. IPC grants fixed capabilities; folder/file paths still come from native selection rather than renderer arguments.
 

@@ -21,6 +21,7 @@ import { SavedYouTube } from "./youtube-saved.cjs";
 import { YouTubePlayer } from "./youtube-player.cjs";
 import { Organization } from "./organization.cjs";
 import { installOrganizationIpc } from "./organization-ipc.cjs";
+import { Downloads } from "./downloads.cjs";
 import { pathToFileURL } from "node:url";
 
 protocol.registerSchemesAsPrivileged([
@@ -64,6 +65,7 @@ let youtube: YouTube;
 let youtubePlayer: YouTubePlayer;
 let youtubeSaved: SavedYouTube;
 let youtubeCredentials: YouTubeCredentials;
+let downloads: Downloads;
 let busy = false;
 let progress: { completed: number; total: number } | null = null;
 function notifyProgress() {
@@ -284,6 +286,40 @@ app
       library,
       () => organization.settings().recordHistory,
     );
+    downloads = new Downloads(path.join(app.getPath("userData"), "downloads.sqlite"), {
+      encrypt: (url) => {
+        if (!safeStorage.isEncryptionAvailable() ||
+            (process.platform === "linux" && safeStorage.getSelectedStorageBackend() === "basic_text"))
+          throw new Error("Secure OS storage is required to save download links.");
+        return safeStorage.encryptString(url).toString("base64");
+      },
+      decrypt: (secret) => safeStorage.decryptString(Buffer.from(secret, "base64")),
+      importFile: async (file, signal) => {
+        while (busy) {
+          signal.throwIfAborted();
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        signal.throwIfAborted();
+        busy = true;
+        try {
+          const result = await library.importFiles([file], (source, id) =>
+            extractor.extract(source, library.thumbnailPath(id)));
+          if (result.failed) throw new Error("Could not import download");
+        } finally {
+          busy = false;
+          extractor.dispose();
+          notifyProgress();
+        }
+      },
+    });
+    ipcMain.handle("downloads:list", event => { trustedSender(event); return downloads.list(); });
+    ipcMain.handle("downloads:add", (event, value: unknown) => {
+      trustedSender(event);
+      return downloads.add(value, organization.downloadDirectory());
+    });
+    ipcMain.handle("downloads:cancel", (event, id: unknown) => { trustedSender(event); return downloads.cancel(id); });
+    ipcMain.handle("downloads:retry", (event, id: unknown) => { trustedSender(event); return downloads.retry(id); });
+    ipcMain.handle("downloads:remove", (event, id: unknown) => { trustedSender(event); return downloads.remove(id); });
     installOrganizationIpc({
       window: () => window,
       trusted: trustedSender,
@@ -455,6 +491,7 @@ app
       .finally(() => {
         busy = false;
         notifyProgress();
+        downloads.start();
       });
     app.on("activate", () => {
       if (!BrowserWindow.getAllWindows().length) createWindow();
@@ -469,6 +506,16 @@ app
   });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+let finishingDownloads = false;
+let downloadsClosed = false;
+app.on("before-quit", event => {
+  if (!downloads || downloadsClosed) return;
+  event.preventDefault();
+  if (finishingDownloads) return;
+  finishingDownloads = true;
+  void downloads.close().finally(() => { downloadsClosed = true; app.quit(); });
 });
 
 app.on("will-quit", () => {

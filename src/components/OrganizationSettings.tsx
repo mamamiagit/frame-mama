@@ -332,13 +332,12 @@ export default function OrganizationSettings() {
         Rebuilding handles up to 100 uncached files per batch. Original videos
         are never deleted by these controls.
       </p>
-      <h2>Future download location</h2>
+      <h2>Download location</h2>
       <div className="setting-row">
         <div>
           <strong>{download || "No folder selected"}</strong>
           <p>
-            Saved for future downloads. Phase 6’s download manager is not
-            implemented.
+            New downloads use this folder. Existing downloads keep their original location.
           </p>
         </div>
         <button
