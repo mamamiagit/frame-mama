@@ -1,0 +1,15 @@
+.downloads-page { max-width: 1100px; margin: 0 auto; }
+.download-form { display: grid; gap: 16px; margin-bottom: 28px; }
+.download-form p, .downloads-page > p, .download-item p { color: var(--muted); line-height: 1.6; }
+.download-form input[type="url"] { width: 100%; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; }
+.download-permission { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; }
+.download-permission input { margin-top: 5px; }
+.download-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.download-folder, .download-item strong, .download-item p { overflow-wrap: anywhere; }
+.download-list { list-style: none; margin: 20px 0; padding: 0; display: grid; gap: 16px; }
+.download-item { padding: 22px; border: 1px solid var(--line); border-radius: 16px; }
+.download-item-heading, .download-queue-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.download-item-heading > span { text-transform: capitalize; flex-shrink: 0; font-size: 13px; }
+.download-item progress { width: 100%; height: 12px; accent-color: var(--accent); margin: 12px 0; }
+.download-error { color: var(--text); border-left: 3px solid var(--accent); padding-left: 12px; }
+@media (max-width: 600px) { .download-item-heading { align-items: flex-start; flex-direction: column; } }

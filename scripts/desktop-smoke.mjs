@@ -10,7 +10,7 @@ const temporary = await mkdtemp(path.join(os.tmpdir(), "frame-desktop-smoke-"));
 await mkdir("test-results", { recursive: true });
 const application = await electron.launch({
   args: [
-    fileURLToPath(new URL("../", import.meta.url)),
+    path.resolve(fileURLToPath(new URL("../", import.meta.url))),
     `--user-data-dir=${temporary}`,
   ],
   env: { ...process.env, FRAME_YOUTUBE_API_KEY: "" },
@@ -30,6 +30,7 @@ try {
   }));
   assert.equal(bridge.info.version, "0.1.0");
   assert.deepEqual(bridge.keys, [
+    "downloads",
     "getAppInfo",
     "library",
     "openYouTube",

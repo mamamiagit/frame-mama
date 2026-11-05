@@ -196,7 +196,7 @@ export function installOrganizationIpc(deps: {
     const window = deps.window();
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
-      title: "Choose future download location",
+      title: "Choose download location",
       properties: ["openDirectory", "createDirectory"],
     });
     if (result.canceled || !result.filePaths.length)
@@ -218,6 +218,7 @@ export function installOrganizationIpc(deps: {
     for (const file of [
       "library/library.sqlite",
       "organization.sqlite",
+      "downloads.sqlite",
       "youtube/saved-links.sqlite",
     ])
       for (const suffix of ["", "-wal", "-shm"]) {

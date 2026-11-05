@@ -42,6 +42,7 @@ import OrganizationSettings from "./components/OrganizationSettings";
 import type { PlaylistDetail } from "../electron/organization-types.cjs";
 import type { YouTubeVideo } from "../electron/youtube-types.cjs";
 import OfflineLibrary from "./components/OfflineLibrary";
+import DownloadsPage from "./components/DownloadsPage";
 
 const navigation = [
   { name: "Home", icon: Home },
@@ -52,16 +53,6 @@ const navigation = [
   { name: "Playlists", icon: ListVideo },
   { name: "Offline Library", icon: FolderOpen },
 ];
-const emptyPages: Record<
-  string,
-  { title: string; body: string; phase: string }
-> = {
-  Downloads: {
-    title: "Good things, ready to go.",
-    body: "Your authorized downloads will appear here, with progress, queue controls, and a home in your offline library.",
-    phase: "Download management is planned for Phase 6.",
-  },
-};
 
 export default function App() {
   const [page, setPage] = useState("Home");
@@ -246,7 +237,6 @@ export default function App() {
     query,
     category,
   );
-  const activeEmpty = emptyPages[page];
 
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
@@ -528,6 +518,8 @@ export default function App() {
               </aside>
             </div>
           </>
+        ) : page === "Downloads" ? (
+          <DownloadsPage />
         ) : page === "Offline Library" ? (
           <OfflineLibrary searchQuery={query} onPlay={playLocal} />
         ) : page === "History" ? (
@@ -636,38 +628,6 @@ export default function App() {
                   About <ChevronRight size={16} />
                 </button>
               </div>
-            </div>
-          </>
-        ) : activeEmpty ? (
-          <>
-            <div className="page-heading">
-              <div>
-                <span className="eyebrow">YOUR SPACE</span>
-                <h1>{page}</h1>
-                <p>Built around the things you want to keep.</p>
-              </div>
-            </div>
-            <div className="empty-state">
-              <span className="empty-icon">
-                {page === "Downloads" ? (
-                  <ArrowDownToLine />
-                ) : page === "History" ? (
-                  <History />
-                ) : page === "Playlists" ? (
-                  <ListVideo />
-                ) : (
-                  <FolderOpen />
-                )}
-              </span>
-              <h2>{activeEmpty.title}</h2>
-              <p>{activeEmpty.body}</p>
-              <span className="phase-label">{activeEmpty.phase}</span>
-              <button
-                className="primary-button"
-                onClick={() => navigate("Home")}
-              >
-                Explore the interface <ArrowRight size={16} />
-              </button>
             </div>
           </>
         ) : (
@@ -838,8 +798,9 @@ export default function App() {
             <p>
               Frame now imports local videos with SQLite metadata and generated
               thumbnails in Offline Library. Home cards remain labeled samples.
-              Local playback and history are available in Offline Library. Live
-              discovery and downloads are planned features.
+              Local playback and history are available in Offline Library.
+              Discover YouTube videos online, organize playlists, or download
+              authorized direct video links for offline viewing.
             </p>
             <button className="primary-button" onClick={() => setAbout(false)}>
               Make yourself at home <ArrowRight size={16} />

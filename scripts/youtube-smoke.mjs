@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-const root = fileURLToPath(new URL("../", import.meta.url));
+const root = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 const temporary = await mkdtemp(path.join(os.tmpdir(), "frame-youtube-smoke-"));
 const userData = path.join(temporary, "app-data"),
   id = "abcDEF123_-",
