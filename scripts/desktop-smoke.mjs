@@ -14,7 +14,7 @@ try {
     nodeAvailable: typeof window.require !== 'undefined' || typeof window.process !== 'undefined',
   }));
   assert.equal(bridge.info.version, '0.1.0');
-  assert.deepEqual(bridge.keys, ['getAppInfo', 'library', 'openYouTube']);
+  assert.deepEqual(bridge.keys, ['getAppInfo', 'library', 'openYouTube', 'playback']);
   assert.equal(bridge.nodeAvailable, false);
   const preferences = await application.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0];

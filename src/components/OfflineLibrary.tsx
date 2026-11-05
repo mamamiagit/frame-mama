@@ -7,6 +7,7 @@ import {
   FileVideo,
   FolderOpen,
   Plus,
+  Play,
   RefreshCw,
   Search,
   Trash2,
@@ -15,6 +16,7 @@ import {
 import type {
   LibraryPage,
   LibrarySort,
+  LocalVideo,
 } from "../../electron/library-types.cjs";
 import type { ImportProgress } from "../vite-env";
 import "./OfflineLibrary.css";
@@ -33,8 +35,10 @@ export function formatDuration(seconds: number | null) {
 
 export default function OfflineLibrary({
   searchQuery,
+  onPlay,
 }: {
   searchQuery: string;
+  onPlay: (video: LocalVideo, queue: LocalVideo[]) => void;
 }) {
   const api = window.frame?.library;
   const [search, setSearch] = useState("");
@@ -280,7 +284,7 @@ export default function OfflineLibrary({
               {data.total} {data.total === 1 ? "video" : "videos"}
               {search && ` matching “${search}”`}
             </span>
-            <span>Playback arrives in Phase 4</span>
+            <span>Click a video to watch offline</span>
           </div>
           <div className="video-grid local-grid">
             {data.items.map((video) => (
@@ -289,6 +293,16 @@ export default function OfflineLibrary({
                 key={video.id}
               >
                 <div className="local-thumbnail">
+                  <button
+                    className="local-play-button"
+                    aria-label={`Play ${video.title}`}
+                    disabled={video.missing}
+                    onClick={() => onPlay(video, data.items)}
+                  >
+                    <span>
+                      <Play size={22} fill="currentColor" />
+                    </span>
+                  </button>
                   {video.thumbnail ? (
                     <img
                       src={video.thumbnail}
@@ -318,7 +332,16 @@ export default function OfflineLibrary({
                   )}
                 </div>
                 <div className="local-card-heading">
-                  <h2 title={video.title}>{video.title}</h2>
+                  <h2>
+                    <button
+                      className="local-title-button"
+                      title={video.title}
+                      disabled={video.missing}
+                      onClick={() => onPlay(video, data.items)}
+                    >
+                      {video.title}
+                    </button>
+                  </h2>
                   <button
                     className="icon-button"
                     disabled={working}
@@ -419,8 +442,7 @@ export default function OfflineLibrary({
             </button>
           )}
           <span className="phase-label">
-            MP4, WebM, MOV, MKV and more · Codec support varies · Playback in
-            Phase 4
+            MP4, WebM, MOV, MKV and more · Codec support varies
           </span>
         </div>
       )}

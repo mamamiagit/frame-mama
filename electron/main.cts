@@ -4,9 +4,21 @@ import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { Library, extensions, isId, validateQuery } from "./library.cjs";
 import { MetadataExtractor } from "./metadata.cjs";
+import { Playback } from "./playback.cjs";
+import { readSubtitle } from "./subtitle-file.cjs";
 import { pathToFileURL } from "node:url";
 
 protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "frame-playback",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+    },
+  },
   {
     scheme: "frame-thumb",
     privileges: { standard: true, secure: true, supportFetchAPI: true },
@@ -31,6 +43,7 @@ const appUrl = pathToFileURL(path.join(__dirname, "../dist/index.html")).href;
 let window: BrowserWindow | null = null;
 let library: Library;
 let extractor: MetadataExtractor;
+let playback: Playback;
 let busy = false;
 let progress: { completed: number; total: number } | null = null;
 function notifyProgress() {
@@ -79,7 +92,13 @@ function createWindow() {
       event.preventDefault();
   });
   window.webContents.session.setPermissionRequestHandler(
-    (_contents, _permission, callback) => callback(false),
+    (contents, permission, callback, details) =>
+      callback(
+        permission === "fullscreen" &&
+          contents === window?.webContents &&
+          details.requestingUrl?.split("#")[0] ===
+            (devUrl ? `${devUrl}/` : appUrl),
+      ),
   );
   if (devUrl) void window.loadURL(devUrl);
   else void window.loadFile(path.join(__dirname, "../dist/index.html"));
@@ -97,6 +116,37 @@ app
     library = new Library(directory);
     await library.prepare();
     extractor = new MetadataExtractor();
+    playback = new Playback(library);
+    protocol.handle("frame-playback", (request) => playback.stream(request));
+    ipcMain.handle("playback:open", (event, id: unknown) => {
+      trustedSender(event);
+      return playback.open(id);
+    });
+    ipcMain.handle("playback:save", (event, token: unknown, value: unknown) => {
+      trustedSender(event);
+      playback.save(token, value);
+    });
+    ipcMain.handle("playback:close", (event, token: unknown) => {
+      trustedSender(event);
+      if (!isId(token)) throw new Error("Invalid session");
+      playback.close(token);
+    });
+    ipcMain.handle("playback:history", (event, offset: unknown) => {
+      trustedSender(event);
+      return library.history(offset);
+    });
+    ipcMain.handle("playback:subtitles", async (event, token: unknown) => {
+      trustedSender(event);
+      playback.requireToken(token);
+      const result = await dialog.showOpenDialog(window!, {
+        title: "Load local subtitles",
+        properties: ["openFile"],
+        filters: [{ name: "UTF-8 subtitles", extensions: ["vtt", "srt"] }],
+      });
+      if (result.canceled || !result.filePaths.length) return null;
+      playback.requireToken(token);
+      return readSubtitle(result.filePaths[0]);
+    });
     protocol.handle("frame-thumb", async (request) => {
       const url = new URL(request.url);
       const id = url.pathname.slice(1);

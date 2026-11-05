@@ -1,3 +1,4 @@
+import type { PlaybackProgress } from "./playback-types.cjs";
 import type { LibraryQuery } from "./library-types.cjs";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -7,6 +8,16 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     getAppInfo: () => ipcRenderer.invoke("frame:info"),
     openYouTube: () => ipcRenderer.invoke("frame:youtube-home"),
+    playback: Object.freeze({
+      open: (id: string) => ipcRenderer.invoke("playback:open", id),
+      save: (token: string, progress: PlaybackProgress) =>
+        ipcRenderer.invoke("playback:save", token, progress),
+      close: (token: string) => ipcRenderer.invoke("playback:close", token),
+      history: (offset: number) =>
+        ipcRenderer.invoke("playback:history", offset),
+      subtitles: (token: string) =>
+        ipcRenderer.invoke("playback:subtitles", token),
+    }),
     library: Object.freeze({
       list: (query: LibraryQuery) => ipcRenderer.invoke("library:list", query),
       importVideos: () => ipcRenderer.invoke("library:import"),

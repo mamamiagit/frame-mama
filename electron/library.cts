@@ -8,6 +8,7 @@ import type {
   LocalVideo,
   ImportResult,
 } from "./library-types.cjs";
+import type { PlaybackProgress, HistoryPage } from "./playback-types.cjs";
 
 export const extensions = [
   "mp4",
@@ -42,6 +43,22 @@ export type Metadata = {
   error: string | null;
   thumbnail: boolean;
 };
+function toVideo(row: Record<string, unknown>): LocalVideo {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    fileName: String(row.fileName),
+    directory: String(row.directory),
+    size: Number(row.size),
+    duration: row.duration === null ? null : Number(row.duration),
+    importedAt: Number(row.importedAt),
+    missing: Boolean(row.missing),
+    metadataError:
+      row.metadataError === null ? null : String(row.metadataError),
+    thumbnail: row.thumbnail ? `frame-thumb://cache/${row.id}` : null,
+  };
+}
+
 export class Library {
   private db: DatabaseSync;
   readonly thumbnails: string;
@@ -49,18 +66,26 @@ export class Library {
     this.thumbnails = path.join(directory, "thumbnails");
     this.db = new DatabaseSync(path.join(directory, "library.sqlite"));
     if (
-      Number(this.db.prepare("PRAGMA user_version").get()!.user_version) > 1
+      Number(this.db.prepare("PRAGMA user_version").get()!.user_version) > 2
     ) {
       this.db.close();
       throw new Error("This library requires a newer version of Frame.");
     }
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
+    this.db
+      .exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS videos (
         id TEXT PRIMARY KEY, source TEXT NOT NULL UNIQUE, title TEXT NOT NULL,
         fileName TEXT NOT NULL, directory TEXT NOT NULL, size REAL NOT NULL,
         duration REAL, importedAt REAL NOT NULL, missing INTEGER NOT NULL DEFAULT 0,
         metadataError TEXT, thumbnail INTEGER NOT NULL DEFAULT 0
-      ); PRAGMA user_version=1;`);
+      );
+      CREATE TABLE IF NOT EXISTS watch_history (
+        videoId TEXT PRIMARY KEY REFERENCES videos(id) ON DELETE CASCADE,
+        position REAL NOT NULL, duration REAL NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0, lastWatched REAL NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS history_recent ON watch_history(lastWatched DESC);
+      PRAGMA user_version=2;`);
   }
   async prepare() {
     await mkdir(this.thumbnails, { recursive: true });
@@ -76,6 +101,75 @@ export class Library {
     if (!isId(id)) throw new Error("Invalid video ID");
     const row = this.db.prepare("SELECT source FROM videos WHERE id=?").get(id);
     return row ? String(row.source) : null;
+  }
+  getVideo(id: string): LocalVideo | null {
+    if (!isId(id)) throw new Error("Invalid video ID");
+    const row = this.db.prepare("SELECT * FROM videos WHERE id=?").get(id);
+    return row ? toVideo(row) : null;
+  }
+  getProgress(id: string): PlaybackProgress | null {
+    if (!isId(id)) throw new Error("Invalid video ID");
+    const row = this.db
+      .prepare("SELECT * FROM watch_history WHERE videoId=?")
+      .get(id);
+    return row
+      ? {
+          position: Number(row.position),
+          duration: Number(row.duration),
+          completed: Boolean(row.completed),
+        }
+      : null;
+  }
+  saveProgress(id: string, value: unknown) {
+    if (!isId(id) || !this.getSource(id)) throw new Error("Video not found");
+    if (!value || typeof value !== "object")
+      throw new Error("Invalid progress");
+    const p = value as Record<string, unknown>;
+    if (
+      typeof p.position !== "number" ||
+      !Number.isFinite(p.position) ||
+      typeof p.duration !== "number" ||
+      !Number.isFinite(p.duration) ||
+      p.duration <= 0 ||
+      p.position < 0 ||
+      p.position > p.duration ||
+      typeof p.completed !== "boolean"
+    )
+      throw new Error("Invalid progress");
+    this.db
+      .prepare(
+        `INSERT INTO watch_history(videoId,position,duration,completed,lastWatched) VALUES(?,?,?,?,?)
+      ON CONFLICT(videoId) DO UPDATE SET position=excluded.position,duration=excluded.duration,completed=excluded.completed,lastWatched=excluded.lastWatched`,
+      )
+      .run(
+        id,
+        p.completed ? 0 : p.position,
+        p.duration,
+        Number(p.completed),
+        Date.now(),
+      );
+  }
+  history(offset: unknown): HistoryPage {
+    if (!Number.isSafeInteger(offset) || Number(offset) < 0)
+      throw new Error("Invalid history page");
+    const rows = this.db
+      .prepare(
+        `SELECT videos.*, watch_history.position, watch_history.duration AS playedDuration, watch_history.completed, watch_history.lastWatched
+      FROM watch_history JOIN videos ON videos.id=watch_history.videoId ORDER BY lastWatched DESC, videoId LIMIT 48 OFFSET ?`,
+      )
+      .all(Number(offset));
+    return {
+      items: rows.map((row) => ({
+        video: toVideo(row),
+        position: Number(row.position),
+        duration: Number(row.playedDuration),
+        completed: Boolean(row.completed),
+        lastWatched: Number(row.lastWatched),
+      })),
+      total: Number(
+        this.db.prepare("SELECT count(*) AS n FROM watch_history").get()!.n,
+      ),
+    };
   }
   list(query: LibraryQuery): LibraryPage {
     const q = validateQuery(query);
@@ -94,22 +188,7 @@ export class Library {
         `SELECT * FROM videos ${where} ORDER BY ${sort} LIMIT 48 OFFSET ?`,
       )
       .all(pattern, pattern, q.offset);
-    const items = rows.map(
-      (row) =>
-        ({
-          id: String(row.id),
-          title: String(row.title),
-          fileName: String(row.fileName),
-          directory: String(row.directory),
-          size: Number(row.size),
-          duration: row.duration === null ? null : Number(row.duration),
-          importedAt: Number(row.importedAt),
-          missing: Boolean(row.missing),
-          metadataError:
-            row.metadataError === null ? null : String(row.metadataError),
-          thumbnail: row.thumbnail ? `frame-thumb://cache/${row.id}` : null,
-        }) satisfies LocalVideo,
-    );
+    const items = rows.map(toVideo);
     const total = Number(
       this.db
         .prepare(`SELECT count(*) AS n FROM videos ${where}`)

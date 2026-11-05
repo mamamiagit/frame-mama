@@ -26,6 +26,9 @@ import {
 import { categories, filterVideos, videos, type Video } from "./catalog";
 import VideoCard from "./components/VideoCard";
 import Artwork from "./components/Artwork";
+import LocalPlayer from "./components/LocalPlayer";
+import PlaybackHistory from "./components/PlaybackHistory";
+import type { LocalVideo } from "../electron/library-types.cjs";
 import OfflineLibrary from "./components/OfflineLibrary";
 
 const navigation = [
@@ -46,11 +49,6 @@ const emptyPages: Record<
     body: "Your authorized downloads will appear here, with progress, queue controls, and a home in your offline library.",
     phase: "Download management is planned for Phase 6.",
   },
-  History: {
-    title: "Pick up where you left off.",
-    body: "Once playback is available, your recently watched videos and resume positions will live here.",
-    phase: "Playback history is planned for Phases 4 and 7.",
-  },
   Playlists: {
     title: "Make a collection your own.",
     body: "Bring local videos and saved YouTube links together in personal playlists.",
@@ -64,6 +62,10 @@ export default function App() {
   const [category, setCategory] = useState("All");
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
+  const [localPlayback, setLocalPlayback] = useState<{
+    video: LocalVideo;
+    queue: LocalVideo[];
+  } | null>(null);
   const [selected, setSelected] = useState<Video | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
@@ -137,7 +139,12 @@ export default function App() {
     }
   }, [notice]);
 
+  function playLocal(video: LocalVideo, queue: LocalVideo[]) {
+    setSelected(null);
+    setLocalPlayback({ video, queue });
+  }
   function navigate(next: string) {
+    setLocalPlayback(null);
     setPage(next);
     setSelected(null);
     setQuery("");
@@ -201,6 +208,7 @@ export default function App() {
             event.preventDefault();
             setQuery(input.trim());
             setSelected(null);
+            setLocalPlayback(null);
             if (
               ![
                 "Home",
@@ -328,7 +336,15 @@ export default function App() {
       </aside>
 
       <main className="main-content" id="main-content">
-        {selected ? (
+        {localPlayback ? (
+          <LocalPlayer
+            key={localPlayback.video.id}
+            video={localPlayback.video}
+            queue={localPlayback.queue}
+            onSelect={(video) => playLocal(video, localPlayback.queue)}
+            onBack={() => setLocalPlayback(null)}
+          />
+        ) : selected ? (
           <>
             <button
               className="text-button back-button"
@@ -344,7 +360,8 @@ export default function App() {
                     <Clapperboard size={36} />
                     <h2>A glimpse of what’s coming.</h2>
                     <p>
-                      This is a sample video. Playback arrives in later phases.
+                      This is sample artwork. Play your own videos in Offline
+                      Library.
                     </p>
                   </div>
                 </div>
@@ -380,9 +397,9 @@ export default function App() {
                   </strong>
                   <p>
                     Original sample artwork and metadata for the Frame
-                    interface. This is not a YouTube video. Local playback is
-                    planned for Phase 4, and official YouTube discovery and
-                    embedded playback for Phase 5.
+                    interface. This is not a YouTube video. Your own local
+                    videos can be played in Offline Library. Official YouTube
+                    discovery and embedded playback for Phase 5.
                   </p>
                 </div>
               </section>
@@ -411,7 +428,9 @@ export default function App() {
             </div>
           </>
         ) : page === "Offline Library" ? (
-          <OfflineLibrary searchQuery={query} />
+          <OfflineLibrary searchQuery={query} onPlay={playLocal} />
+        ) : page === "History" ? (
+          <PlaybackHistory onPlay={playLocal} />
         ) : page === "Settings" ? (
           <>
             <div className="page-heading">
@@ -695,7 +714,8 @@ export default function App() {
             <p>
               Frame now imports local videos with SQLite metadata and generated
               thumbnails in Offline Library. Home cards remain labeled samples.
-              Playback, live discovery, and downloads are planned features.
+              Local playback and history are available in Offline Library. Live
+              discovery and downloads are planned features.
             </p>
             <button className="primary-button" onClick={() => setAbout(false)}>
               Make yourself at home <ArrowRight size={16} />

@@ -17,7 +17,8 @@
     "test:ui": "playwright test",
     "dist:win": "npm run build && electron-builder --win nsis",
     "test:desktop": "node scripts/desktop-smoke.mjs",
-    "test:library": "node scripts/library-smoke.mjs"
+    "test:library": "node scripts/library-smoke.mjs",
+    "test:playback": "node scripts/playback-smoke.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
