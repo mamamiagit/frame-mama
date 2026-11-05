@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, protocol } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  dialog,
+  protocol,
+  session,
+  safeStorage,
+} from "electron";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -6,6 +15,10 @@ import { Library, extensions, isId, validateQuery } from "./library.cjs";
 import { MetadataExtractor } from "./metadata.cjs";
 import { Playback } from "./playback.cjs";
 import { readSubtitle } from "./subtitle-file.cjs";
+import { YouTube, videoId, watchUrl } from "./youtube.cjs";
+import { YouTubeCredentials } from "./youtube-credentials.cjs";
+import { SavedYouTube } from "./youtube-saved.cjs";
+import { YouTubePlayer } from "./youtube-player.cjs";
 import { pathToFileURL } from "node:url";
 
 protocol.registerSchemesAsPrivileged([
@@ -44,6 +57,10 @@ let window: BrowserWindow | null = null;
 let library: Library;
 let extractor: MetadataExtractor;
 let playback: Playback;
+let youtube: YouTube;
+let youtubePlayer: YouTubePlayer;
+let youtubeSaved: SavedYouTube;
+let youtubeCredentials: YouTubeCredentials;
 let busy = false;
 let progress: { completed: number; total: number } | null = null;
 function notifyProgress() {
@@ -87,6 +104,9 @@ function createWindow() {
     },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => {
+    if (isMainFrame) youtubePlayer?.dispose();
+  });
   window.webContents.on("will-navigate", (event, url) => {
     if (url.split("#")[0] !== (devUrl ? `${devUrl}/` : appUrl))
       event.preventDefault();
@@ -103,6 +123,7 @@ function createWindow() {
   if (devUrl) void window.loadURL(devUrl);
   else void window.loadFile(path.join(__dirname, "../dist/index.html"));
   window.on("closed", () => {
+    youtubePlayer?.dispose();
     window = null;
     extractor?.dispose();
   });
@@ -115,6 +136,132 @@ app
     mkdirSync(directory, { recursive: true });
     library = new Library(directory);
     await library.prepare();
+    const youtubeDirectory = path.join(app.getPath("userData"), "youtube");
+    mkdirSync(youtubeDirectory, { recursive: true });
+    youtubeCredentials = new YouTubeCredentials(
+      path.join(youtubeDirectory, "api-key.enc"),
+      {
+        available: () =>
+          safeStorage.isEncryptionAvailable() &&
+          (process.platform !== "linux" ||
+            safeStorage.getSelectedStorageBackend() !== "basic_text"),
+        encrypt: (value) => safeStorage.encryptString(value),
+        decrypt: (value) => safeStorage.decryptString(value),
+      },
+    );
+    await youtubeCredentials.load();
+    youtubeSaved = new SavedYouTube(
+      path.join(youtubeDirectory, "saved-links.sqlite"),
+    );
+    const apiSession = session.fromPartition("frame-youtube-api");
+    const playerSession = session.fromPartition("frame-youtube-player");
+    // Chromium sessions must use the managed environment's configured proxy too.
+    const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+    if (proxy)
+      await Promise.all(
+        [apiSession, playerSession, session.defaultSession].map((item) =>
+          item.setProxy({ proxyRules: proxy }),
+        ),
+      );
+    youtube = new YouTube(
+      () => youtubeCredentials.get(),
+      (url, init) => apiSession.fetch(url, init),
+    );
+    youtubePlayer = new YouTubePlayer(() => window, playerSession);
+    let changingKey = false;
+    ipcMain.handle("youtube:status", (event) => {
+      trustedSender(event);
+      return youtubeCredentials.status();
+    });
+    ipcMain.handle("youtube:import-key", async (event) => {
+      trustedSender(event);
+      if (changingKey) throw new Error("A key operation is already running.");
+      changingKey = true;
+      try {
+        const result = await dialog.showOpenDialog(window!, {
+          title: "Select a text file containing your YouTube API key",
+          properties: ["openFile"],
+          filters: [{ name: "API key text file", extensions: ["txt"] }],
+        });
+        if (result.canceled || !result.filePaths.length)
+          return youtubeCredentials.status();
+        try {
+          const status = await youtubeCredentials.importFile(
+            result.filePaths[0],
+          );
+          youtube.clearCache();
+          return status;
+        } catch {
+          throw new Error(
+            "Could not import the key. Use a small UTF-8 file containing only your key and check secure storage availability.",
+          );
+        }
+      } finally {
+        changingKey = false;
+      }
+    });
+    ipcMain.handle("youtube:clear-key", async (event) => {
+      trustedSender(event);
+      if (changingKey) throw new Error("A key operation is already running.");
+      changingKey = true;
+      try {
+        const status = await youtubeCredentials.clear();
+        youtube.clearCache();
+        return status;
+      } finally {
+        changingKey = false;
+      }
+    });
+    ipcMain.handle("youtube:list", async (event, value: unknown) => {
+      trustedSender(event);
+      const result = await youtube.list(value);
+      return result.ok
+        ? {
+            ...result,
+            savedIds: youtubeSaved.flags(result.items.map((item) => item.id)),
+          }
+        : result;
+    });
+    ipcMain.handle("youtube:save", async (event, value: unknown) => {
+      trustedSender(event);
+      const id = videoId(value);
+      youtubeSaved.save(id, await youtube.detail(id));
+    });
+    ipcMain.handle("youtube:saved-flags", (event, value: unknown) => {
+      trustedSender(event);
+      return youtubeSaved.flags(value);
+    });
+    ipcMain.handle("youtube:unsave", (event, value: unknown) => {
+      trustedSender(event);
+      youtubeSaved.remove(videoId(value));
+    });
+    ipcMain.handle(
+      "youtube:saved",
+      (event, search: unknown, offset: unknown) => {
+        trustedSender(event);
+        return youtubeSaved.list(search, offset);
+      },
+    );
+    ipcMain.handle("youtube:open-browser", async (event, value: unknown) => {
+      trustedSender(event);
+      await shell.openExternal(watchUrl(value));
+    });
+    ipcMain.handle("youtube:player-open", (event, value: unknown) => {
+      trustedSender(event);
+      return youtubePlayer.open(value);
+    });
+    ipcMain.handle(
+      "youtube:player-bounds",
+      (event, token: unknown, value: unknown) => {
+        trustedSender(event);
+        youtubePlayer.setBounds(token, value);
+      },
+    );
+    ipcMain.handle("youtube:player-close", (event, token: unknown) => {
+      trustedSender(event);
+      if (!isId(token)) throw new Error("Invalid player session");
+      youtubePlayer.close(token);
+    });
     extractor = new MetadataExtractor();
     playback = new Playback(library);
     protocol.handle("frame-playback", (request) => playback.stream(request));
@@ -280,6 +427,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  youtubePlayer?.dispose();
+  youtubeSaved?.close();
   extractor?.dispose();
   library?.close();
 });

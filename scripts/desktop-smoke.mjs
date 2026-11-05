@@ -14,7 +14,7 @@ try {
     nodeAvailable: typeof window.require !== 'undefined' || typeof window.process !== 'undefined',
   }));
   assert.equal(bridge.info.version, '0.1.0');
-  assert.deepEqual(bridge.keys, ['getAppInfo', 'library', 'openYouTube', 'playback']);
+  assert.deepEqual(bridge.keys, ['getAppInfo', 'library', 'openYouTube', 'playback', 'youtube']);
   assert.equal(bridge.nodeAvailable, false);
   const preferences = await application.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0];
@@ -23,7 +23,7 @@ try {
   });
   assert.deepEqual(preferences, { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true });
   await page.getByRole('button', { name: 'YouTube Discovery', exact: true }).click();
-  await page.getByRole('button', { name: 'Open YouTube' }).waitFor();
+  await page.getByRole('button', { name: 'Open YouTube', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
   await page.screenshot({ path: 'test-results/desktop-settings.png' });

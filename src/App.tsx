@@ -31,6 +31,11 @@ import { readColorway, type Colorway } from "./appearance";
 import LocalPlayer from "./components/LocalPlayer";
 import PlaybackHistory from "./components/PlaybackHistory";
 import type { LocalVideo } from "../electron/library-types.cjs";
+import YouTubeDiscovery from "./components/YouTubeDiscovery";
+import YouTubeSettings from "./components/YouTubeSettings";
+import YouTubeWatch from "./components/YouTubeWatch";
+import SavedYouTube from "./components/SavedYouTube";
+import type { YouTubeVideo } from "../electron/youtube-types.cjs";
 import OfflineLibrary from "./components/OfflineLibrary";
 
 const navigation = [
@@ -68,6 +73,29 @@ export default function App() {
     video: LocalVideo;
     queue: LocalVideo[];
   } | null>(null);
+  const [youtubeVideo, setYouTubeVideo] = useState<YouTubeVideo | null>(null);
+  const [savedRevision, setSavedRevision] = useState(0);
+  const [youtubeSavedCount, setYouTubeSavedCount] = useState(0);
+  useEffect(() => {
+    let canceled = false;
+    window.frame?.youtube
+      .saved("", 0)
+      .then((result) => {
+        if (!canceled) setYouTubeSavedCount(result.total);
+      })
+      .catch(() => {});
+    return () => {
+      canceled = true;
+    };
+  }, [savedRevision]);
+  function savedChanged() {
+    setSavedRevision((value) => value + 1);
+  }
+  function watchYouTube(video: YouTubeVideo) {
+    setSelected(null);
+    setLocalPlayback(null);
+    setYouTubeVideo(video);
+  }
   const [selected, setSelected] = useState<Video | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
@@ -151,10 +179,12 @@ export default function App() {
   }, [notice]);
 
   function playLocal(video: LocalVideo, queue: LocalVideo[]) {
+    setYouTubeVideo(null);
     setSelected(null);
     setLocalPlayback({ video, queue });
   }
   function navigate(next: string) {
+    setYouTubeVideo(null);
     setLocalPlayback(null);
     setPage(next);
     setSelected(null);
@@ -217,6 +247,7 @@ export default function App() {
           className="search"
           onSubmit={(event) => {
             event.preventDefault();
+            setYouTubeVideo(null);
             setQuery(input.trim());
             setSelected(null);
             setLocalPlayback(null);
@@ -237,13 +268,23 @@ export default function App() {
             aria-label={
               page === "Offline Library"
                 ? "Search library from header"
-                : "Search sample videos"
+                : page === "YouTube Discovery"
+                  ? "Search YouTube from header"
+                  : page === "Watch Later"
+                    ? "Search saved YouTube links"
+                    : "Search sample videos"
             }
-            maxLength={300}
+            maxLength={
+              page === "Home" || page === "Offline Library" ? 300 : 200
+            }
             placeholder={
               page === "Offline Library"
                 ? "Search your local videos"
-                : "Search something worth watching"
+                : page === "YouTube Discovery"
+                  ? "Search YouTube videos"
+                  : page === "Watch Later"
+                    ? "Search saved links"
+                    : "Search something worth watching"
             }
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -305,9 +346,10 @@ export default function App() {
               >
                 <Icon size={21} />
                 <span>{name}</span>
-                {name === "Watch Later" && saved.length > 0 && (
-                  <small>{saved.length}</small>
-                )}
+                {name === "Watch Later" &&
+                  saved.length + youtubeSavedCount > 0 && (
+                    <small>{saved.length + youtubeSavedCount}</small>
+                  )}
                 {name === "YouTube Discovery" && (
                   <ExternalLink size={13} className="nav-extra" />
                 )}
@@ -347,7 +389,15 @@ export default function App() {
       </aside>
 
       <main className="main-content" id="main-content">
-        {localPlayback ? (
+        {youtubeVideo ? (
+          <YouTubeWatch
+            key={youtubeVideo.id}
+            video={youtubeVideo}
+            obscured={about}
+            onBack={() => setYouTubeVideo(null)}
+            onSavedChange={savedChanged}
+          />
+        ) : localPlayback ? (
           <LocalPlayer
             key={localPlayback.video.id}
             video={localPlayback.video}
@@ -409,8 +459,8 @@ export default function App() {
                   <p>
                     Original sample artwork and metadata for the Frame
                     interface. This is not a YouTube video. Your own local
-                    videos can be played in Offline Library. Official YouTube
-                    discovery and embedded playback for Phase 5.
+                    videos can be played in Offline Library. Find real online
+                    videos in YouTube Discovery.
                   </p>
                 </div>
               </section>
@@ -442,6 +492,46 @@ export default function App() {
           <OfflineLibrary searchQuery={query} onPlay={playLocal} />
         ) : page === "History" ? (
           <PlaybackHistory onPlay={playLocal} />
+        ) : page === "YouTube Discovery" ? (
+          <YouTubeDiscovery
+            searchQuery={query}
+            onSearch={(value) => {
+              setInput(value);
+              setQuery(value);
+            }}
+            onOpen={watchYouTube}
+            onSettings={() => navigate("Settings")}
+            onSavedChange={savedChanged}
+          />
+        ) : page === "Watch Later" ? (
+          <>
+            <SavedYouTube
+              searchQuery={query}
+              onOpen={watchYouTube}
+              onSavedChange={savedChanged}
+              hasSamples={saved.length > 0}
+            />
+            {saved.length > 0 && (
+              <section className="saved-sample-section">
+                <h2>Session-only samples</h2>
+                <p>
+                  These are demonstration cards, separate from your persistent
+                  YouTube links.
+                </p>
+                <div className="video-grid">
+                  {filtered.map((video) => (
+                    <VideoCard
+                      key={video.id}
+                      video={video}
+                      saved={saved.includes(video.id)}
+                      onOpen={() => setSelected(video)}
+                      onSave={() => toggleSave(video.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         ) : page === "Settings" ? (
           <>
             <div className="page-heading">
@@ -482,6 +572,7 @@ export default function App() {
                 mode={theme}
                 onChange={setColorway}
               />
+              <YouTubeSettings />
               <h2>Your library</h2>
               {[
                 "Download location",
@@ -610,22 +701,6 @@ export default function App() {
                     <span /> A world worth watching
                   </span>
                 </div>
-              </section>
-            )}
-            {page === "YouTube Discovery" && (
-              <section className="discovery-banner">
-                <Compass size={28} />
-                <div>
-                  <h2>Your YouTube, one click away.</h2>
-                  <p>
-                    Open your actual homepage in your browser. API discovery
-                    comes in Phase 5; personalized homepage recommendations are
-                    not exposed by the YouTube Data API.
-                  </p>
-                </div>
-                <button className="secondary-button" onClick={openYouTube}>
-                  Open YouTube <ExternalLink size={16} />
-                </button>
               </section>
             )}
             <div className="section-heading">

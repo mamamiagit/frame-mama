@@ -6,3 +6,7 @@ playwright-report/
 test-results/
 *.log
 .env*
+
+# Local credential files must never be committed.
+*api-key*.txt
+*api-key*.enc
