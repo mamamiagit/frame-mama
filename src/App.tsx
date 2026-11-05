@@ -35,6 +35,11 @@ import YouTubeDiscovery from "./components/YouTubeDiscovery";
 import YouTubeSettings from "./components/YouTubeSettings";
 import YouTubeWatch from "./components/YouTubeWatch";
 import SavedYouTube from "./components/SavedYouTube";
+import PlaylistsPage from "./components/PlaylistsPage";
+import PlaylistPlayback from "./components/PlaylistPlayback";
+import LocalWatchLater from "./components/LocalWatchLater";
+import OrganizationSettings from "./components/OrganizationSettings";
+import type { PlaylistDetail } from "../electron/organization-types.cjs";
 import type { YouTubeVideo } from "../electron/youtube-types.cjs";
 import OfflineLibrary from "./components/OfflineLibrary";
 
@@ -56,11 +61,6 @@ const emptyPages: Record<
     body: "Your authorized downloads will appear here, with progress, queue controls, and a home in your offline library.",
     phase: "Download management is planned for Phase 6.",
   },
-  Playlists: {
-    title: "Make a collection your own.",
-    body: "Bring local videos and saved YouTube links together in personal playlists.",
-    phase: "Playlist management is planned for Phase 7.",
-  },
 };
 
 export default function App() {
@@ -73,11 +73,37 @@ export default function App() {
     video: LocalVideo;
     queue: LocalVideo[];
   } | null>(null);
+  const [playlistPlayback, setPlaylistPlayback] = useState<{
+    detail: PlaylistDetail;
+    entry?: string;
+  } | null>(null);
+  const [lastPlaylist, setLastPlaylist] = useState("");
+  const [collectionDialogs, setCollectionDialogs] = useState(0);
+  const [localLaterCount, setLocalLaterCount] = useState(0);
+  useEffect(() => {
+    const dialog = (event: Event) =>
+      setCollectionDialogs((value) =>
+        Math.max(0, value + (event as CustomEvent<number>).detail),
+      );
+    const refresh = () => setSavedRevision((value) => value + 1);
+    window.addEventListener("frame:dialog", dialog);
+    window.addEventListener("frame:collections-changed", refresh);
+    return () => {
+      window.removeEventListener("frame:dialog", dialog);
+      window.removeEventListener("frame:collections-changed", refresh);
+    };
+  }, []);
   const [youtubeVideo, setYouTubeVideo] = useState<YouTubeVideo | null>(null);
   const [savedRevision, setSavedRevision] = useState(0);
   const [youtubeSavedCount, setYouTubeSavedCount] = useState(0);
   useEffect(() => {
     let canceled = false;
+    window.frame?.organization
+      .localLaterCount()
+      .then((value) => {
+        if (!canceled) setLocalLaterCount(value);
+      })
+      .catch(() => {});
     window.frame?.youtube
       .saved("", 0)
       .then((result) => {
@@ -92,6 +118,7 @@ export default function App() {
     setSavedRevision((value) => value + 1);
   }
   function watchYouTube(video: YouTubeVideo) {
+    setPlaylistPlayback(null);
     setSelected(null);
     setLocalPlayback(null);
     setYouTubeVideo(video);
@@ -179,11 +206,13 @@ export default function App() {
   }, [notice]);
 
   function playLocal(video: LocalVideo, queue: LocalVideo[]) {
+    setPlaylistPlayback(null);
     setYouTubeVideo(null);
     setSelected(null);
     setLocalPlayback({ video, queue });
   }
   function navigate(next: string) {
+    setPlaylistPlayback(null);
     setYouTubeVideo(null);
     setLocalPlayback(null);
     setPage(next);
@@ -247,6 +276,7 @@ export default function App() {
           className="search"
           onSubmit={(event) => {
             event.preventDefault();
+            setPlaylistPlayback(null);
             setYouTubeVideo(null);
             setQuery(input.trim());
             setSelected(null);
@@ -347,8 +377,10 @@ export default function App() {
                 <Icon size={21} />
                 <span>{name}</span>
                 {name === "Watch Later" &&
-                  saved.length + youtubeSavedCount > 0 && (
-                    <small>{saved.length + youtubeSavedCount}</small>
+                  saved.length + youtubeSavedCount + localLaterCount > 0 && (
+                    <small>
+                      {saved.length + youtubeSavedCount + localLaterCount}
+                    </small>
                   )}
                 {name === "YouTube Discovery" && (
                   <ExternalLink size={13} className="nav-extra" />
@@ -389,11 +421,19 @@ export default function App() {
       </aside>
 
       <main className="main-content" id="main-content">
-        {youtubeVideo ? (
+        {playlistPlayback ? (
+          <PlaylistPlayback
+            detail={playlistPlayback.detail}
+            initialEntry={playlistPlayback.entry}
+            onBack={() => setPlaylistPlayback(null)}
+            onSavedChange={savedChanged}
+            obscured={about || collectionDialogs > 0}
+          />
+        ) : youtubeVideo ? (
           <YouTubeWatch
             key={youtubeVideo.id}
             video={youtubeVideo}
-            obscured={about}
+            obscured={about || collectionDialogs > 0}
             onBack={() => setYouTubeVideo(null)}
             onSavedChange={savedChanged}
           />
@@ -491,7 +531,15 @@ export default function App() {
         ) : page === "Offline Library" ? (
           <OfflineLibrary searchQuery={query} onPlay={playLocal} />
         ) : page === "History" ? (
-          <PlaybackHistory onPlay={playLocal} />
+          <PlaybackHistory onPlay={playLocal} onYouTube={watchYouTube} />
+        ) : page === "Playlists" ? (
+          <PlaylistsPage
+            initialId={lastPlaylist}
+            onPlay={(detail, entry) => {
+              setLastPlaylist(detail.playlist.id);
+              setPlaylistPlayback({ detail, entry });
+            }}
+          />
         ) : page === "YouTube Discovery" ? (
           <YouTubeDiscovery
             searchQuery={query}
@@ -511,6 +559,7 @@ export default function App() {
               onSavedChange={savedChanged}
               hasSamples={saved.length > 0}
             />
+            <LocalWatchLater query={query} onPlay={playLocal} />
             {saved.length > 0 && (
               <section className="saved-sample-section">
                 <h2>Session-only samples</h2>
@@ -573,23 +622,7 @@ export default function App() {
                 onChange={setColorway}
               />
               <YouTubeSettings />
-              <h2>Your library</h2>
-              {[
-                "Download location",
-                "Library directories",
-                "Playback preferences",
-                "Storage & thumbnail cache",
-              ].map((label) => (
-                <div className="setting-row" key={label}>
-                  <div>
-                    <strong>{label}</strong>
-                    <p>
-                      Available when the corresponding feature is implemented.
-                    </p>
-                  </div>
-                  <span className="coming-tag">Planned</span>
-                </div>
-              ))}
+              <OrganizationSettings />
               <h2>Application</h2>
               <div className="setting-row">
                 <div>

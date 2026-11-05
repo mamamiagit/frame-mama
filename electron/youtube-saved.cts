@@ -12,6 +12,15 @@ export class SavedYouTube {
     this.db.exec(
       "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS saved_links(id TEXT PRIMARY KEY,metadata TEXT,metadataAt INTEGER NOT NULL DEFAULT 0,savedAt INTEGER NOT NULL);",
     );
+    if (
+      !this.db
+        .prepare("PRAGMA table_info(saved_links)")
+        .all()
+        .some((row) => row.name === "watchLater")
+    )
+      this.db.exec(
+        "ALTER TABLE saved_links ADD COLUMN watchLater INTEGER NOT NULL DEFAULT 1",
+      );
     this.expire();
   }
   private expire() {
@@ -21,30 +30,45 @@ export class SavedYouTube {
       )
       .run(this.now() - 30 * 86400000);
   }
-  save(id: string, metadata: YouTubeVideo | null) {
+  save(id: string, metadata: YouTubeVideo | null, watchLater = true) {
     if (!isYouTubeId(id) || (metadata && metadata.id !== id))
       throw new Error("Invalid saved video");
     this.expire();
     this.db
       .prepare(
-        `INSERT INTO saved_links(id,metadata,metadataAt,savedAt) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET metadata=COALESCE(excluded.metadata,saved_links.metadata),metadataAt=CASE WHEN excluded.metadata IS NULL THEN saved_links.metadataAt ELSE excluded.metadataAt END`,
+        `INSERT INTO saved_links(id,metadata,metadataAt,savedAt,watchLater) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET metadata=COALESCE(excluded.metadata,saved_links.metadata),metadataAt=CASE WHEN excluded.metadata IS NULL THEN saved_links.metadataAt ELSE excluded.metadataAt END,watchLater=max(saved_links.watchLater,excluded.watchLater)`,
       )
       .run(
         id,
         metadata ? JSON.stringify(metadata) : null,
         metadata ? this.now() : 0,
         this.now(),
+        Number(watchLater),
       );
+  }
+  get(id: string): YouTubeVideo | null {
+    if (!isYouTubeId(id)) throw new Error("Invalid ID");
+    this.expire();
+    const row = this.db
+      .prepare("SELECT metadata FROM saved_links WHERE id=?")
+      .get(id);
+    return row
+      ? row.metadata
+        ? JSON.parse(String(row.metadata))
+        : fallbackVideo(id)
+      : null;
   }
   flags(value: unknown): string[] {
     if (!Array.isArray(value) || value.length > 50 || !value.every(isYouTubeId))
       throw new Error("Invalid saved video IDs");
-    const query = this.db.prepare("SELECT id FROM saved_links WHERE id=?");
+    const query = this.db.prepare(
+      "SELECT id FROM saved_links WHERE id=? AND watchLater=1",
+    );
     return value.filter((id) => Boolean(query.get(id)));
   }
   remove(id: string) {
     if (!isYouTubeId(id)) throw new Error("Invalid saved video");
-    this.db.prepare("DELETE FROM saved_links WHERE id=?").run(id);
+    this.db.prepare("UPDATE saved_links SET watchLater=0 WHERE id=?").run(id);
   }
   list(search: unknown, offset: unknown): SavedYouTubePage {
     if (
@@ -57,7 +81,7 @@ export class SavedYouTube {
     this.expire();
     const pattern = `%${search.trim().replace(/[\\%_]/g, "\\$&")}%`;
     const where =
-      "WHERE id LIKE ? ESCAPE '\\' OR COALESCE(json_extract(metadata,'$.title'),'Saved YouTube video') LIKE ? ESCAPE '\\'";
+      "WHERE watchLater=1 AND (id LIKE ? ESCAPE '\\' OR COALESCE(json_extract(metadata,'$.title'),'Saved YouTube video') LIKE ? ESCAPE '\\')";
     const rows = this.db
       .prepare(
         `SELECT * FROM saved_links ${where} ORDER BY savedAt DESC,id LIMIT 48 OFFSET ?`,

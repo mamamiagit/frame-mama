@@ -20,6 +20,7 @@ import type {
 } from "../../electron/library-types.cjs";
 import type { ImportProgress } from "../vite-env";
 import "./OfflineLibrary.css";
+import AddToPlaylist, { LocalLaterButton } from "./AddToPlaylist";
 
 export function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -342,22 +343,29 @@ export default function OfflineLibrary({
                       {video.title}
                     </button>
                   </h2>
-                  <button
-                    className="icon-button"
-                    disabled={working}
-                    aria-label={`Remove ${video.title} from library`}
-                    title="Remove from library (keeps original file)"
-                    onClick={() =>
-                      void run(async () => {
-                        if (await api!.remove(video.id))
-                          setMessage(
-                            "Library entry removed. Your original file was kept.",
-                          );
-                      })
-                    }
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="organization-actions">
+                    <LocalLaterButton id={video.id} title={video.title} />
+                    <AddToPlaylist
+                      source={{ kind: "local", id: video.id }}
+                      title={video.title}
+                    />
+                    <button
+                      className="icon-button"
+                      disabled={working}
+                      aria-label={`Remove ${video.title} from library`}
+                      title="Remove from library (keeps original file)"
+                      onClick={() =>
+                        void run(async () => {
+                          if (await api!.remove(video.id))
+                            setMessage(
+                              "Library entry removed. Your original file was kept.",
+                            );
+                        })
+                      }
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
                 <p className="local-file-info">
                   {formatSize(video.size)} ·{" "}

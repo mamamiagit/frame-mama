@@ -17,36 +17,29 @@ import type { LocalVideo } from "../../electron/library-types.cjs";
 import type { PlaybackSession } from "../../electron/playback-types.cjs";
 import { formatDuration, formatSize } from "./OfflineLibrary";
 import "./LocalPlayer.css";
+import { speeds, usePlayerPreferences } from "../playerPreferences";
 import useFullscreenControls from "./useFullscreenControls";
-
-const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-function preferences() {
-  try {
-    const p = JSON.parse(localStorage.getItem("frame-player") || "{}");
-    return {
-      volume:
-        typeof p.volume === "number" && p.volume >= 0 && p.volume <= 1
-          ? p.volume
-          : 0.8,
-      muted: p.muted === true,
-      speed: speeds.includes(p.speed) ? (p.speed as number) : 1,
-      autoplay: p.autoplay === true,
-    };
-  } catch {
-    return { volume: 0.8, muted: false, speed: 1, autoplay: false };
-  }
-}
+import AddToPlaylist, { LocalLaterButton } from "./AddToPlaylist";
 
 export default function LocalPlayer({
   video,
   queue,
   onSelect,
   onBack,
+  playlistControls,
+  restart = false,
 }: {
   video: LocalVideo;
   queue: LocalVideo[];
   onSelect: (video: LocalVideo) => void;
   onBack: () => void;
+  restart?: boolean;
+  playlistControls?: {
+    hasNext: boolean;
+    next: () => void;
+    onEnded: () => void;
+    autoAdvance: boolean;
+  };
 }) {
   const api = window.frame?.playback;
   const media = useRef<HTMLVideoElement>(null);
@@ -71,7 +64,7 @@ export default function LocalPlayer({
     error,
   );
   const [attempt, setAttempt] = useState(0);
-  const [prefs, setPrefs] = useState(preferences);
+  const { prefs, setPrefs } = usePlayerPreferences();
   const [subtitle, setSubtitle] = useState<{
     name: string;
     url: string;
@@ -194,11 +187,6 @@ export default function LocalPlayer({
       element.volume = prefs.volume;
       element.muted = prefs.muted;
       element.playbackRate = prefs.speed;
-    }
-    try {
-      localStorage.setItem("frame-player", JSON.stringify(prefs));
-    } catch {
-      /* Preferences still work without browser storage. */
     }
   }, [prefs, session]);
   useEffect(
@@ -359,6 +347,7 @@ export default function LocalPlayer({
                 const resume = active.current?.progress;
                 if (
                   resume &&
+                  !restart &&
                   !resume.completed &&
                   resume.position < length - 0.15
                 ) {
@@ -387,7 +376,11 @@ export default function LocalPlayer({
               onEnded={() => {
                 setPaused(true);
                 void save().then(() => {
-                  if (alive.current && prefs.autoplay && next) onSelect(next);
+                  if (!alive.current) return;
+                  if (playlistControls) {
+                    if (playlistControls.autoAdvance)
+                      playlistControls.onEnded();
+                  } else if (prefs.autoplay && next) onSelect(next);
                 });
               }}
               onError={() => {
@@ -465,8 +458,14 @@ export default function LocalPlayer({
                 </button>
                 <button
                   aria-label="Next video"
-                  disabled={!next}
-                  onClick={() => next && onSelect(next)}
+                  disabled={
+                    playlistControls ? !playlistControls.hasNext : !next
+                  }
+                  onClick={() =>
+                    playlistControls
+                      ? playlistControls.next()
+                      : next && onSelect(next)
+                  }
                 >
                   <SkipForward size={24} />
                 </button>
@@ -545,6 +544,13 @@ export default function LocalPlayer({
               <FileVideo size={16} />
               {formatSize(video.size)} · Local video
             </span>
+            <div className="organization-actions">
+              <LocalLaterButton id={video.id} title={video.title} />
+              <AddToPlaylist
+                source={{ kind: "local", id: video.id }}
+                title={video.title}
+              />
+            </div>
             <button
               className="secondary-button"
               disabled={!session || subtitleBusy}
@@ -577,7 +583,7 @@ export default function LocalPlayer({
             </p>
           </details>
         </section>
-        <aside className="local-up-next">
+        <aside className="local-up-next" hidden={Boolean(playlistControls)}>
           <div className="up-next-heading">
             <h2>Up next</h2>
             <label>

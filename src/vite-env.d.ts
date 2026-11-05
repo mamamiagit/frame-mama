@@ -17,12 +17,14 @@ import type {
   EmbedBounds,
   EmbedVisibility,
 } from "../electron/youtube-types.cjs";
+import type { OrganizationAPI } from "../electron/organization-types.cjs";
 export type ImportProgress = { completed: number; total: number } | null;
 declare global {
   interface Window {
     frame?: {
       getAppInfo: () => Promise<{ version: string; platform: string }>;
       openYouTube: () => Promise<void>;
+      organization: OrganizationAPI;
       youtube: {
         status: () => Promise<YouTubeStatus>;
         importKey: () => Promise<YouTubeStatus>;
@@ -33,7 +35,7 @@ declare global {
         unsave: (id: string) => Promise<void>;
         saved: (search: string, offset: number) => Promise<SavedYouTubePage>;
         openBrowser: (id: string) => Promise<void>;
-        playerOpen: (id: string) => Promise<string>;
+        playerOpen: (id: string, loop?: boolean) => Promise<string>;
         playerBounds: (
           token: string,
           bounds: EmbedBounds,

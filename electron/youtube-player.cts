@@ -6,8 +6,9 @@ import type { EmbedBounds, EmbedVisibility } from "./youtube-types.cjs";
 // Explicit native-client identity for YouTube's embedded-player Referer requirement.
 // This is Frame's configured application ID, not another site's identity.
 export const playerReferrer = "https://app.frame.offline/";
-export function embedUrl(id: unknown) {
-  return `https://www.youtube-nocookie.com/embed/${videoId(id)}?playsinline=1&autoplay=0&rel=0`;
+export function embedUrl(id: unknown, loop: unknown = false) {
+  if (typeof loop !== "boolean") throw new Error("Invalid repeat option");
+  return `https://www.youtube-nocookie.com/embed/${videoId(id)}?playsinline=1&autoplay=0&rel=0${loop ? `&loop=1&playlist=${videoId(id)}` : ""}`;
 }
 export function validateEmbedBounds(value: unknown): EmbedBounds {
   if (!value || typeof value !== "object")
@@ -58,8 +59,8 @@ export class YouTubePlayer {
     if (window && !window.isDestroyed())
       window.webContents.send("youtube:player-state", { token, error });
   }
-  open(value: unknown) {
-    const url = embedUrl(value),
+  open(value: unknown, loop: unknown = false) {
+    const url = embedUrl(value, loop),
       window = this.window();
     if (!window) throw new Error("App window unavailable");
     this.dispose();

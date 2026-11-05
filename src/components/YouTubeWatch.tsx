@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { YouTubeVideo } from "../../electron/youtube-types.cjs";
+import AddToPlaylist from "./AddToPlaylist";
 import { formatDuration } from "./OfflineLibrary";
 import "./YouTube.css";
 
@@ -17,11 +18,13 @@ export default function YouTubeWatch({
   onBack,
   onSavedChange,
   obscured,
+  repeatOne = false,
 }: {
   video: YouTubeVideo;
   onBack: () => void;
   onSavedChange: () => void;
   obscured: boolean;
+  repeatOne?: boolean;
 }) {
   const api = window.frame?.youtube,
     slot = useRef<HTMLDivElement>(null);
@@ -70,7 +73,7 @@ export default function YouTubeWatch({
       }
     });
     api
-      .playerOpen(video.id)
+      .playerOpen(video.id, repeatOne)
       .then((value) => {
         current = value;
         if (canceled) {
@@ -94,7 +97,7 @@ export default function YouTubeWatch({
       unsubscribe();
       if (current) void api.playerClose(current).catch(() => {});
     };
-  }, [api, video.id, loaded, retry]);
+  }, [api, video.id, loaded, retry, repeatOne]);
   useEffect(() => {
     const element = slot.current;
     if (!api || !token || !element) return;
@@ -232,6 +235,10 @@ export default function YouTubeWatch({
           </p>
         </div>
         <div className="youtube-actions">
+          <AddToPlaylist
+            source={{ kind: "youtube", id: video.id }}
+            title={video.title}
+          />
           {loaded && (
             <button
               className="secondary-button"

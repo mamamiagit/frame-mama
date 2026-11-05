@@ -7,7 +7,10 @@ import type { PlaybackSession } from "./playback-types.cjs";
 export class Playback {
   private active: { token: string; id: string } | null = null;
   private sequence = 0;
-  constructor(private library: Library) {}
+  constructor(
+    private library: Library,
+    private record = () => true,
+  ) {}
   async open(id: unknown): Promise<PlaybackSession> {
     if (!isId(id)) throw new Error("Invalid video ID");
     const video = this.library.getVideo(id);
@@ -35,7 +38,8 @@ export class Playback {
     return this.active.id;
   }
   save(token: unknown, progress: unknown) {
-    this.library.saveProgress(this.requireToken(token), progress);
+    const id = this.requireToken(token);
+    this.library.saveProgress(id, progress, this.record());
   }
   close(token: unknown) {
     if (this.active?.token === token) {

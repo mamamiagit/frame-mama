@@ -1,5 +1,7 @@
 import { Bookmark, Check, Play, ExternalLink, Wifi } from "lucide-react";
 import type { YouTubeVideo } from "../../electron/youtube-types.cjs";
+import AddToPlaylist from "./AddToPlaylist";
+import { useOnlineStatus } from "../useOnlineStatus";
 import { formatDuration } from "./OfflineLibrary";
 export default function YouTubeCard({
   video,
@@ -16,6 +18,7 @@ export default function YouTubeCard({
   onSave: () => void;
   onBrowser: () => void;
 }) {
+  const online = useOnlineStatus();
   return (
     <article className="youtube-card">
       <button
@@ -40,7 +43,7 @@ export default function YouTubeCard({
         )}
         <span className="youtube-online-label">
           <Wifi size={11} />
-          Online
+          {online ? "Online only" : "Unavailable offline"}
         </span>
         <span className="duration">
           {video.live
@@ -64,6 +67,10 @@ export default function YouTubeCard({
             : ""}
         </p>
         <div className="youtube-card-actions">
+          <AddToPlaylist
+            source={{ kind: "youtube", id: video.id }}
+            title={video.title}
+          />
           <button
             className="text-button"
             disabled={busy}

@@ -66,7 +66,7 @@ export class Library {
     this.thumbnails = path.join(directory, "thumbnails");
     this.db = new DatabaseSync(path.join(directory, "library.sqlite"));
     if (
-      Number(this.db.prepare("PRAGMA user_version").get()!.user_version) > 2
+      Number(this.db.prepare("PRAGMA user_version").get()!.user_version) > 3
     ) {
       this.db.close();
       throw new Error("This library requires a newer version of Frame.");
@@ -85,7 +85,65 @@ export class Library {
         completed INTEGER NOT NULL DEFAULT 0, lastWatched REAL NOT NULL
       );
       CREATE INDEX IF NOT EXISTS history_recent ON watch_history(lastWatched DESC);
-      PRAGMA user_version=2;`);
+      PRAGMA user_version=3;`);
+    if (
+      !this.db
+        .prepare("PRAGMA table_info(videos)")
+        .all()
+        .some((row) => row.name === "metadataCheckedAt")
+    )
+      this.db.exec(
+        "ALTER TABLE videos ADD COLUMN metadataCheckedAt REAL NOT NULL DEFAULT 0",
+      );
+  }
+  removeHistory(id: unknown) {
+    if (!isId(id)) throw new Error("Invalid video ID");
+    this.db.prepare("DELETE FROM watch_history WHERE videoId=?").run(id);
+  }
+  clearHistory() {
+    this.db.exec("DELETE FROM watch_history");
+  }
+  sources() {
+    return new Set(
+      this.db
+        .prepare("SELECT source FROM videos")
+        .all()
+        .map((row) => String(row.source)),
+    );
+  }
+  previewCandidates() {
+    return this.db
+      .prepare(
+        "SELECT id,source FROM videos WHERE thumbnail=0 AND missing=0 ORDER BY metadataCheckedAt,id LIMIT 100",
+      )
+      .all()
+      .map((row) => ({ id: String(row.id), source: String(row.source) }));
+  }
+  setMetadata(id: string, metadata: Metadata) {
+    if (!isId(id)) throw new Error("Invalid ID");
+    this.db
+      .prepare(
+        "UPDATE videos SET duration=?,metadataError=?,thumbnail=?,metadataCheckedAt=? WHERE id=?",
+      )
+      .run(
+        metadata.duration,
+        metadata.error,
+        Number(metadata.thumbnail),
+        Date.now(),
+        id,
+      );
+  }
+  thumbnailIds() {
+    return this.db
+      .prepare("SELECT id FROM videos WHERE thumbnail=1")
+      .all()
+      .map((row) => String(row.id));
+  }
+  clearThumbnail(id: string) {
+    if (!isId(id)) throw new Error("Invalid ID");
+    this.db
+      .prepare("UPDATE videos SET thumbnail=0,metadataCheckedAt=0 WHERE id=?")
+      .run(id);
   }
   async prepare() {
     await mkdir(this.thumbnails, { recursive: true });
@@ -120,7 +178,7 @@ export class Library {
         }
       : null;
   }
-  saveProgress(id: string, value: unknown) {
+  saveProgress(id: string, value: unknown, record = true) {
     if (!isId(id) || !this.getSource(id)) throw new Error("Video not found");
     if (!value || typeof value !== "object")
       throw new Error("Invalid progress");
@@ -136,6 +194,7 @@ export class Library {
       typeof p.completed !== "boolean"
     )
       throw new Error("Invalid progress");
+    if (!record) return;
     this.db
       .prepare(
         `INSERT INTO watch_history(videoId,position,duration,completed,lastWatched) VALUES(?,?,?,?,?)

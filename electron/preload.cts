@@ -1,3 +1,8 @@
+import type {
+  MediaRef,
+  OrganizationSettings,
+  PlaybackPreferences,
+} from "./organization-types.cjs";
 import type { YouTubeQuery, EmbedBounds } from "./youtube-types.cjs";
 import type { PlaybackProgress } from "./playback-types.cjs";
 import type { LibraryQuery } from "./library-types.cjs";
@@ -9,6 +14,56 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     getAppInfo: () => ipcRenderer.invoke("frame:info"),
     openYouTube: () => ipcRenderer.invoke("frame:youtube-home"),
+    organization: Object.freeze({
+      list: () => ipcRenderer.invoke("organization:list"),
+      create: (name: string) => ipcRenderer.invoke("organization:create", name),
+      rename: (id: string, name: string) =>
+        ipcRenderer.invoke("organization:rename", id, name),
+      delete: (id: string) => ipcRenderer.invoke("organization:delete", id),
+      detail: (id: string) => ipcRenderer.invoke("organization:detail", id),
+      add: (id: string, source: MediaRef) =>
+        ipcRenderer.invoke("organization:add", id, source),
+      removeEntry: (id: string, entry: string) =>
+        ipcRenderer.invoke("organization:remove-entry", id, entry),
+      reorder: (id: string, order: string[]) =>
+        ipcRenderer.invoke("organization:reorder", id, order),
+      localLater: () => ipcRenderer.invoke("organization:local-later"),
+      isLocalLater: (id: string) =>
+        ipcRenderer.invoke("organization:is-local-later", id),
+      localLaterCount: () =>
+        ipcRenderer.invoke("organization:local-later-count"),
+      saveLocalLater: (id: string, save: boolean) =>
+        ipcRenderer.invoke("organization:save-local-later", id, save),
+      settings: () => ipcRenderer.invoke("organization:settings"),
+      updateSettings: (patch: Partial<OrganizationSettings>) =>
+        ipcRenderer.invoke("organization:update-settings", patch),
+      initializePlayback: (prefs: PlaybackPreferences) =>
+        ipcRenderer.invoke("organization:initialize-playback", prefs),
+      updatePlayback: (prefs: PlaybackPreferences) =>
+        ipcRenderer.invoke("organization:update-playback", prefs),
+      youtubeVisits: (offset: number) =>
+        ipcRenderer.invoke("organization:youtube-visits", offset),
+      removeVisit: (id: string) =>
+        ipcRenderer.invoke("organization:remove-visit", id),
+      removeHistory: (id: string) =>
+        ipcRenderer.invoke("organization:remove-history", id),
+      clearHistory: () => ipcRenderer.invoke("organization:clear-history"),
+      directories: () => ipcRenderer.invoke("organization:directories"),
+      addDirectory: () => ipcRenderer.invoke("organization:add-directory"),
+      removeDirectory: (id: string) =>
+        ipcRenderer.invoke("organization:remove-directory", id),
+      scanDirectory: (id: string) =>
+        ipcRenderer.invoke("organization:scan-directory", id),
+      downloadDirectory: () =>
+        ipcRenderer.invoke("organization:download-directory"),
+      chooseDownloadDirectory: () =>
+        ipcRenderer.invoke("organization:choose-download-directory"),
+      storage: () => ipcRenderer.invoke("organization:storage"),
+      clearThumbnails: () =>
+        ipcRenderer.invoke("organization:clear-thumbnails"),
+      rebuildThumbnails: () =>
+        ipcRenderer.invoke("organization:rebuild-thumbnails"),
+    }),
     youtube: Object.freeze({
       status: () => ipcRenderer.invoke("youtube:status"),
       importKey: () => ipcRenderer.invoke("youtube:import-key"),
@@ -22,7 +77,8 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.invoke("youtube:saved", search, offset),
       openBrowser: (id: string) =>
         ipcRenderer.invoke("youtube:open-browser", id),
-      playerOpen: (id: string) => ipcRenderer.invoke("youtube:player-open", id),
+      playerOpen: (id: string, loop = false) =>
+        ipcRenderer.invoke("youtube:player-open", id, loop),
       playerBounds: (token: string, bounds: EmbedBounds) =>
         ipcRenderer.invoke("youtube:player-bounds", token, bounds),
       playerClose: (token: string) =>
