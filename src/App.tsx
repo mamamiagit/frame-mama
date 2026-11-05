@@ -26,6 +26,8 @@ import {
 import { categories, filterVideos, videos, type Video } from "./catalog";
 import VideoCard from "./components/VideoCard";
 import Artwork from "./components/Artwork";
+import AppearancePicker from "./components/AppearancePicker";
+import { readColorway, type Colorway } from "./appearance";
 import LocalPlayer from "./components/LocalPlayer";
 import PlaybackHistory from "./components/PlaybackHistory";
 import type { LocalVideo } from "../electron/library-types.cjs";
@@ -78,6 +80,15 @@ export default function App() {
       return "dark";
     }
   });
+  const [colorway, setColorway] = useState<Colorway>(readColorway);
+  useEffect(() => {
+    document.documentElement.dataset.colorway = colorway;
+    try {
+      localStorage.setItem("frame-colorway", colorway);
+    } catch {
+      /* Color selection remains usable without storage. */
+    }
+  }, [colorway]);
   const searchRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -466,6 +477,11 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              <AppearancePicker
+                value={colorway}
+                mode={theme}
+                onChange={setColorway}
+              />
               <h2>Your library</h2>
               {[
                 "Download location",

@@ -36,7 +36,7 @@
   display: block;
   width: 100%;
   height: 14px;
-  accent-color: #d3e9a5;
+  accent-color: var(--highlight);
   cursor: pointer;
   margin: 0 0 3px;
 }
@@ -44,28 +44,28 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  min-height: 30px;
+  min-height: 36px;
 }
 .player-control-row button {
   display: grid;
   place-items: center;
-  width: 29px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 4px;
   color: #edf2e7;
   flex-shrink: 0;
 }
 .player-control-row button:hover {
   background: #36402e;
-  color: #d3e9a5;
+  color: var(--highlight);
 }
 .player-control-row button[aria-pressed="true"] {
-  color: #d3e9a5;
-  border-bottom: 2px solid #d3e9a5;
+  color: var(--highlight);
+  border-bottom: 2px solid var(--highlight);
 }
 .player-control-row input[type="range"] {
   width: 64px;
-  accent-color: #d3e9a5;
+  accent-color: var(--highlight);
   min-width: 35px;
 }
 .player-clock {
@@ -116,7 +116,7 @@
   background: #1c251bce;
   border: 1px solid #b4cd9288;
   border-radius: 50%;
-  color: #d3e9a5;
+  color: var(--highlight);
   z-index: 1;
 }
 .big-play:hover {
@@ -244,7 +244,7 @@
   padding: 10px 25px 18px;
 }
 .player-shell:fullscreen video {
-  max-height: calc(100vh - 80px);
+  max-height: none;
 }
 .player-shell:fullscreen .player-clock {
   font-size: 13px;
@@ -409,6 +409,107 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .local-play-button > span {
+    transition: none;
+  }
+}
+
+/* Fullscreen uses an overlay, keeping the video and captions at their full size. */
+.player-controls {
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+.player-control-row button {
+  touch-action: manipulation;
+}
+.player-control-row button:focus-visible {
+  outline-color: var(--highlight);
+}
+.big-play {
+  color: var(--highlight);
+  border-color: color-mix(in srgb, var(--highlight) 55%, transparent);
+}
+.player-shell:fullscreen video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+.player-shell:fullscreen .player-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 45px 32px 20px;
+  background: linear-gradient(
+    transparent,
+    rgba(0, 0, 0, 0.8) 50%,
+    rgba(0, 0, 0, 0.94)
+  );
+}
+.player-shell:fullscreen .player-control-row {
+  gap: 14px;
+}
+.player-shell:fullscreen .player-control-row button {
+  width: 44px;
+  height: 44px;
+}
+.player-shell:fullscreen .player-control-row button .lucide {
+  width: 28px;
+  height: 28px;
+}
+.player-shell:fullscreen .player-control-row select {
+  font-size: 13px;
+  max-width: 100px;
+  padding: 8px;
+}
+.player-shell:fullscreen .player-control-row input[type="range"] {
+  width: 90px;
+}
+.player-shell:fullscreen.controls-hidden .player-controls {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+.player-shell:fullscreen.controls-hidden,
+.player-shell:fullscreen.controls-hidden video {
+  cursor: none;
+}
+.player-shell:fullscreen .player-message {
+  inset: 0;
+}
+.player-shell:fullscreen .big-play {
+  top: 50%;
+}
+.player-shell video::cue {
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+}
+@media (max-width: 650px) {
+  .player-control-row {
+    gap: 4px;
+  }
+  .player-control-row button {
+    width: 32px;
+    height: 36px;
+  }
+  .player-shell:fullscreen .player-controls {
+    padding: 32px 12px 12px;
+  }
+  .player-shell:fullscreen .player-control-row {
+    gap: 5px;
+  }
+  .player-shell:fullscreen .player-control-row button {
+    width: 36px;
+    height: 38px;
+  }
+  .player-shell:fullscreen .player-control-row input[type="range"] {
+    width: 55px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-controls {
     transition: none;
   }
 }

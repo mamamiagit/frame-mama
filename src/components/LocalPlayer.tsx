@@ -17,6 +17,7 @@ import type { LocalVideo } from "../../electron/library-types.cjs";
 import type { PlaybackSession } from "../../electron/playback-types.cjs";
 import { formatDuration, formatSize } from "./OfflineLibrary";
 import "./LocalPlayer.css";
+import useFullscreenControls from "./useFullscreenControls";
 
 const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 function preferences() {
@@ -62,12 +63,43 @@ export default function LocalPlayer({
   const [duration, setDuration] = useState(0);
   const [theater, setTheater] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const controlsVisible = useFullscreenControls(
+    container,
+    fullscreen,
+    paused,
+    ready,
+    error,
+  );
   const [attempt, setAttempt] = useState(0);
   const [prefs, setPrefs] = useState(preferences);
   const [subtitle, setSubtitle] = useState<{
     name: string;
     url: string;
   } | null>(null);
+  const cuePositions = useRef(
+    new WeakMap<VTTCue, { line: number | "auto"; snap: boolean }>(),
+  );
+  const positionCaptions = useCallback(
+    (track: TextTrack) => {
+      for (const cue of Array.from(track.cues || [])) {
+        if (!(cue instanceof VTTCue)) continue;
+        let original = cuePositions.current.get(cue);
+        if (!original) {
+          original = { line: cue.line, snap: cue.snapToLines };
+          cuePositions.current.set(cue, original);
+        }
+        if (original.line !== "auto") continue;
+        cue.snapToLines = fullscreen && controlsVisible ? false : original.snap;
+        cue.line = fullscreen && controlsVisible ? 82 : original.line;
+      }
+    },
+    [fullscreen, controlsVisible],
+  );
+  useEffect(() => {
+    if (media.current)
+      for (const track of Array.from(media.current.textTracks))
+        positionCaptions(track);
+  }, [positionCaptions]);
   const [cc, setCc] = useState(true);
   const [subtitleBusy, setSubtitleBusy] = useState(false);
   const index = queue.findIndex((item) => item.id === video.id);
@@ -303,7 +335,7 @@ export default function LocalPlayer({
       <div className="local-watch-layout">
         <section className="local-watch-main">
           <div
-            className="player-shell"
+            className={`player-shell ${controlsVisible ? "controls-visible" : "controls-hidden"}`}
             ref={container}
             tabIndex={0}
             aria-label="Local video player"
@@ -376,6 +408,7 @@ export default function LocalPlayer({
                   srcLang="und"
                   default
                   onLoad={(event) => {
+                    positionCaptions(event.currentTarget.track);
                     event.currentTarget.track.mode = cc
                       ? "showing"
                       : "disabled";
@@ -428,23 +461,23 @@ export default function LocalPlayer({
                   disabled={!ready}
                   onClick={togglePlay}
                 >
-                  {paused ? <Play size={20} /> : <Pause size={20} />}
+                  {paused ? <Play size={24} /> : <Pause size={24} />}
                 </button>
                 <button
                   aria-label="Next video"
                   disabled={!next}
                   onClick={() => next && onSelect(next)}
                 >
-                  <SkipForward size={20} />
+                  <SkipForward size={24} />
                 </button>
                 <button
                   aria-label={prefs.muted ? "Unmute" : "Mute"}
                   onClick={() => setPrefs((p) => ({ ...p, muted: !p.muted }))}
                 >
                   {prefs.muted || prefs.volume === 0 ? (
-                    <VolumeX size={20} />
+                    <VolumeX size={24} />
                   ) : (
-                    <Volume2 size={20} />
+                    <Volume2 size={24} />
                   )}
                 </button>
                 <input
@@ -488,20 +521,20 @@ export default function LocalPlayer({
                   aria-pressed={Boolean(subtitle && cc)}
                   onClick={() => setCc((value) => !value)}
                 >
-                  <Captions size={20} />
+                  <Captions size={24} />
                 </button>
                 <button
                   aria-label="Theater mode"
                   aria-pressed={theater}
                   onClick={() => setTheater((value) => !value)}
                 >
-                  <Monitor size={20} />
+                  <Monitor size={24} />
                 </button>
                 <button
                   aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
                   onClick={toggleFullscreen}
                 >
-                  {fullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                  {fullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
                 </button>
               </div>
             </div>

@@ -144,6 +144,59 @@ try {
   );
   await page.getByRole("button", { name: "Fullscreen", exact: true }).click();
   await page.waitForFunction(() => Boolean(document.fullscreenElement));
+  // Fullscreen controls overlay the video and disappear only during idle playback.
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.mouse.move(400, 170);
+  await page.waitForFunction(() =>
+    document
+      .querySelector(".player-shell")
+      .classList.contains("controls-hidden"),
+  );
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.querySelector(".player-controls")).opacity ===
+      "0",
+  );
+  assert.equal(
+    await page
+      .locator("video")
+      .evaluate((video) => getComputedStyle(video).cursor),
+    "none",
+  );
+  const fillsScreen = await page.locator("video").evaluate((video) => {
+    const r = video.getBoundingClientRect();
+    return r.width >= innerWidth - 1 && r.height >= innerHeight - 1;
+  });
+  assert.ok(fillsScreen);
+  await page.screenshot({ path: "test-results/fullscreen-idle.png" });
+  await page.mouse.move(420, 190);
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.querySelector(".player-controls")).opacity ===
+      "1",
+  );
+  await pause(page);
+  await page.waitForTimeout(2900);
+  assert.ok(
+    await page
+      .locator(".player-shell")
+      .evaluate((element) => element.classList.contains("controls-visible")),
+  );
+  await range(page, "Seek video", 0);
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.mouse.move(400, 170);
+  await page.getByRole("button", { name: "Pause", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(2900);
+  assert.ok(
+    await page
+      .locator(".player-shell")
+      .evaluate((element) => element.classList.contains("controls-visible")),
+    "Keyboard-focused controls must stay visible",
+  );
+  await pause(page);
+  await range(page, "Seek video", 6);
+
   await page
     .getByRole("button", { name: "Exit fullscreen", exact: true })
     .click();
@@ -173,6 +226,21 @@ try {
   await page
     .getByRole("button", { name: "Show subtitles", exact: true })
     .click();
+  await page.getByRole("button", { name: "Fullscreen", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      document.fullscreenElement &&
+      document.querySelector("video").textTracks[0].cues[0].line === 82,
+  );
+  await page.screenshot({ path: "test-results/fullscreen-captions.png" });
+  await page
+    .getByRole("button", { name: "Exit fullscreen", exact: true })
+    .click();
+  await page.waitForFunction(
+    () =>
+      !document.fullscreenElement &&
+      document.querySelector("video").textTracks[0].cues[0].line === "auto",
+  );
   await page.screenshot({ path: "test-results/local-player.png" });
   await page.getByRole("button", { name: "History", exact: true }).click();
   await page
@@ -276,7 +344,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real offline decoding, play/pause, seek, volume/mute, keyboard shortcuts, speed, theater/fullscreen, SRT captions, saved history/resume across restart, autoplay/end-of-queue, expired URL rejection, corrupt/missing-file errors, and recovery.",
+    "PASS: real offline decoding, play/pause, seek, volume/mute, keyboard shortcuts, speed, theater/fullscreen, idle fade/cursor hiding, movement/pause/keyboard wake, SRT captions, saved history/resume across restart, autoplay/end-of-queue, expired URL rejection, corrupt/missing-file errors, and recovery.",
   );
 } finally {
   if (application) await application.close();
