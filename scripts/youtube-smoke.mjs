@@ -195,13 +195,106 @@ try {
   await page
     .getByRole("button", { name: "Unsave First public video", exact: true })
     .waitFor();
+  await page.evaluate(() => {
+    document.querySelector("main").style.paddingBottom = "1000px";
+    window.scrollTo(0, 300);
+  });
+  assert.ok(await page.evaluate(() => scrollY > 100));
   await page
     .getByRole("button", { name: "Watch First public video", exact: true })
     .click();
+  await page.waitForFunction(() => scrollY === 0);
+  await page.evaluate(() => {
+    document.querySelector("main").style.paddingBottom = "";
+  });
   await page
     .getByRole("button", { name: "Load official player", exact: true })
     .click();
-  const state = await waitState((state) => state?.visible);
+  let state = await waitState((state) => state?.visible);
+  // Wide/short windows and zoom used to hide the entire view when its bottom
+  // extended a few pixels beyond the viewport, leaving a misleading placeholder.
+  for (const { width, height, zoom } of [
+    { width: 1366, height: 640, zoom: 1 },
+    { width: 1100, height: 640, zoom: 1.25 },
+    { width: 900, height: 640, zoom: 1.5 },
+  ]) {
+    await application.evaluate(
+      ({ BrowserWindow }, size) => {
+        const window = BrowserWindow.getAllWindows()[0];
+        window.setContentSize(size.width, size.height);
+        window.webContents.setZoomFactor(size.zoom);
+      },
+      { width, height, zoom },
+    );
+    await page.evaluate(() => window.scrollTo(0, 0));
+    try {
+      await waitState(
+        (state) =>
+          state?.visible && state.bounds.y + state.bounds.height <= height + 1,
+      );
+      await page.waitForFunction(
+        () => {
+          const rect = document
+            .querySelector(".youtube-player-slot")
+            .getBoundingClientRect();
+          return rect.bottom <= innerHeight + 1;
+        },
+        undefined,
+        { timeout: 3000 },
+      );
+    } catch {
+      const geometry = await page
+        .locator(".youtube-player-slot")
+        .evaluate((element) => ({
+          top: element.getBoundingClientRect().top,
+          bottom: element.getBoundingClientRect().bottom,
+          height: element.getBoundingClientRect().height,
+          viewport: innerHeight,
+        }));
+      throw new Error(
+        `Native player hidden at ${width}×${height}, zoom ${zoom}: ${JSON.stringify(geometry)}`,
+      );
+    }
+  }
+  await application.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.webContents.setZoomFactor(1);
+    window.setContentSize(1280, 900);
+  });
+  await page.waitForFunction(() => innerWidth >= 1200);
+  const restoredSlot = await page.locator(".youtube-player-slot").boundingBox();
+  state = await waitState(
+    (state) =>
+      state?.visible && Math.abs(state.bounds.width - restoredSlot.width) <= 1,
+  );
+  await page.getByText("YouTube player opened.", { exact: true }).waitFor();
+  assert.equal(
+    await page
+      .getByText("Official YouTube player · requires internet access", {
+        exact: true,
+      })
+      .count(),
+    0,
+  );
+  await page.evaluate(() => {
+    document.querySelector("main").style.paddingBottom = "1000px";
+    window.scrollTo(0, 250);
+  });
+  await waitState((state) => state && !state.visible);
+  await page
+    .getByText("Scroll up to bring the YouTube player into view.", {
+      exact: true,
+    })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Reload YouTube player", exact: true })
+    .click();
+  await page.waitForFunction(() => scrollY === 0);
+  await page.evaluate(() => {
+    document.querySelector("main").style.paddingBottom = "";
+  });
+  await waitState((state) => state?.visible);
+  await page.getByText("YouTube player opened.", { exact: true }).waitFor();
   assert.ok(
     state.url.startsWith(`https://www.youtube-nocookie.com/embed/${id}`),
   );
@@ -220,14 +313,26 @@ try {
     );
   });
   assert.deepEqual(isolation, { node: "undefined", bridge: "undefined" });
-  await application.evaluate(async ({shell,webContents})=>{
-    globalThis.externalPlayerLinks=[];
-    shell.openExternal=async url=>{globalThis.externalPlayerLinks.push(url);};
-    const contents=webContents.getAllWebContents().find(item=>item.getURL().startsWith('https://www.youtube-nocookie.com/embed/'));
-    await contents.executeJavaScript("window.open('https://www.youtube.com/watch?v=abcDEF123_-');window.open('https://evil.test/');undefined",true);
+  await application.evaluate(async ({ shell, webContents }) => {
+    globalThis.externalPlayerLinks = [];
+    shell.openExternal = async (url) => {
+      globalThis.externalPlayerLinks.push(url);
+    };
+    const contents = webContents
+      .getAllWebContents()
+      .find((item) =>
+        item.getURL().startsWith("https://www.youtube-nocookie.com/embed/"),
+      );
+    await contents.executeJavaScript(
+      "window.open('https://www.youtube.com/watch?v=abcDEF123_-');window.open('https://evil.test/');undefined",
+      true,
+    );
   });
   await page.waitForTimeout(150);
-  assert.deepEqual(await application.evaluate(()=>globalThis.externalPlayerLinks),['https://www.youtube.com/watch?v=abcDEF123_-']);
+  assert.deepEqual(
+    await application.evaluate(() => globalThis.externalPlayerLinks),
+    ["https://www.youtube.com/watch?v=abcDEF123_-"],
+  );
   const request = await application.evaluate(() => globalThis.embedRequests[0]);
   assert.equal(request.hasKey, false);
   assert.equal(
@@ -272,8 +377,10 @@ try {
     }),
   );
   await page.reload();
-  await page.getByRole('heading', {name:'Find your next favorite'}).waitFor();
-  await waitState(state=>state===null);
+  await page
+    .getByRole("heading", { name: "Find your next favorite" })
+    .waitFor();
+  await waitState((state) => state === null);
   await page
     .getByRole("button", { name: "Watch Later", exact: false })
     .first()

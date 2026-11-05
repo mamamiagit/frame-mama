@@ -1,7 +1,7 @@
 import { BrowserWindow, WebContentsView, shell, type Session } from "electron";
 import { randomUUID } from "node:crypto";
 import { videoId, officialPlayerLink } from "./youtube.cjs";
-import type { EmbedBounds } from "./youtube-types.cjs";
+import type { EmbedBounds, EmbedVisibility } from "./youtube-types.cjs";
 
 // Explicit native-client identity for YouTube's embedded-player Referer requirement.
 // This is Frame's configured application ID, not another site's identity.
@@ -89,7 +89,7 @@ export class YouTubePlayer {
     };
     view.webContents.setWindowOpenHandler(({ url }) => {
       openOfficial(url);
-      return { action: 'deny' };
+      return { action: "deny" };
     });
     const allow = (destination: string) => {
       try {
@@ -103,7 +103,10 @@ export class YouTubePlayer {
       }
     };
     view.webContents.on("will-navigate", (event, destination) => {
-      if (!allow(destination)) { event.preventDefault(); openOfficial(destination); }
+      if (!allow(destination)) {
+        event.preventDefault();
+        openOfficial(destination);
+      }
     });
     view.webContents.on(
       "will-redirect",
@@ -171,7 +174,7 @@ export class YouTubePlayer {
       });
     return token;
   }
-  setBounds(token: unknown, value: unknown) {
+  setBounds(token: unknown, value: unknown): EmbedVisibility {
     const bounds = validateEmbedBounds(value),
       active = this.active,
       window = this.window();
@@ -181,7 +184,7 @@ export class YouTubePlayer {
     if (active.fullscreen) {
       const { width, height } = window.getContentBounds();
       active.view.setBounds({ x: 0, y: 0, width, height });
-      return;
+      return { visible: active.view.getVisible() };
     }
     const factor = window.webContents.getZoomFactor(),
       viewport = window.getContentBounds();
@@ -202,6 +205,7 @@ export class YouTubePlayer {
       rect.y + rect.height <= viewport.height + 1;
     if (visible) active.view.setBounds(rect);
     active.view.setVisible(visible);
+    return { visible };
   }
   close(token: unknown) {
     if (this.active?.token === token) this.dispose();

@@ -46,3 +46,6 @@ export interface EmbedBounds {
   height: number;
   visible: boolean;
 }
+export interface EmbedVisibility {
+  visible: boolean;
+}

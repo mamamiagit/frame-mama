@@ -254,7 +254,7 @@ app
       "youtube:player-bounds",
       (event, token: unknown, value: unknown) => {
         trustedSender(event);
-        youtubePlayer.setBounds(token, value);
+        return youtubePlayer.setBounds(token, value);
       },
     );
     ipcMain.handle("youtube:player-close", (event, token: unknown) => {

@@ -15,6 +15,7 @@ import type {
   YouTubeResult,
   SavedYouTubePage,
   EmbedBounds,
+  EmbedVisibility,
 } from "../electron/youtube-types.cjs";
 export type ImportProgress = { completed: number; total: number } | null;
 declare global {
@@ -33,7 +34,10 @@ declare global {
         saved: (search: string, offset: number) => Promise<SavedYouTubePage>;
         openBrowser: (id: string) => Promise<void>;
         playerOpen: (id: string) => Promise<string>;
-        playerBounds: (token: string, bounds: EmbedBounds) => Promise<void>;
+        playerBounds: (
+          token: string,
+          bounds: EmbedBounds,
+        ) => Promise<EmbedVisibility>;
         playerClose: (token: string) => Promise<void>;
         onPlayerState: (
           callback: (state: { token: string; error: string | null }) => void,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bookmark,
@@ -26,12 +26,21 @@ export default function YouTubeWatch({
   const api = window.frame?.youtube,
     slot = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false),
+    [playerReady, setPlayerReady] = useState(false),
+    [nativeVisible, setNativeVisible] = useState(false),
+    [layoutHint, setLayoutHint] = useState(
+      "Scroll up to bring the YouTube player into view.",
+    ),
     [retry, setRetry] = useState(0),
     [token, setToken] = useState<string | null>(null),
     [playerError, setPlayerError] = useState(""),
     [actionError, setActionError] = useState(""),
     [saved, setSaved] = useState(false),
     [busy, setBusy] = useState(false);
+  // A result can be selected far down a discovery page; do not inherit its scroll offset.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [video.id, retry]);
   useEffect(() => {
     let canceled = false;
     api
@@ -50,11 +59,15 @@ export default function YouTubeWatch({
       current: string | null = null,
       early: { token: string; error: string | null } | null = null;
     setPlayerError("");
+    setPlayerReady(false);
+    setNativeVisible(false);
     setToken(null);
     const unsubscribe = api.onPlayerState((state) => {
       if (!current) early = state;
-      else if (state.token === current && !canceled)
+      else if (state.token === current && !canceled) {
         setPlayerError(state.error || "");
+        setPlayerReady(!state.error);
+      }
     });
     api
       .playerOpen(video.id)
@@ -65,7 +78,10 @@ export default function YouTubeWatch({
           return;
         }
         setToken(value);
-        if (early && early.token === value) setPlayerError(early.error || "");
+        if (early && early.token === value) {
+          setPlayerError(early.error || "");
+          setPlayerReady(!early.error);
+        }
       })
       .catch(() => {
         if (!canceled)
@@ -82,7 +98,8 @@ export default function YouTubeWatch({
   useEffect(() => {
     const element = slot.current;
     if (!api || !token || !element) return;
-    let frame = 0;
+    let frame = 0,
+      canceled = false;
     const sync = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -90,6 +107,14 @@ export default function YouTubeWatch({
           header =
             document.querySelector(".topbar")?.getBoundingClientRect().bottom ||
             0;
+        const fits =
+          rect.height <= innerHeight - header + 1 &&
+          rect.width <= innerWidth + 1;
+        setLayoutHint(
+          fits
+            ? "Scroll up to bring the YouTube player into view."
+            : "Enlarge the window or zoom out to show the YouTube player.",
+        );
         void api
           .playerBounds(token, {
             x: rect.x,
@@ -98,12 +123,22 @@ export default function YouTubeWatch({
             height: rect.height,
             visible:
               !obscured &&
-              rect.top >= header &&
-              rect.bottom <= innerHeight &&
-              rect.left >= 0 &&
-              rect.right <= innerWidth,
+              rect.top >= header - 1 &&
+              rect.bottom <= innerHeight + 1 &&
+              rect.left >= -1 &&
+              rect.right <= innerWidth + 1,
           })
-          .catch(() => {});
+          .then((result) => {
+            if (!canceled) setNativeVisible(result.visible);
+          })
+          .catch(() => {
+            if (!canceled) {
+              setNativeVisible(false);
+              setPlayerError(
+                "The player could not be displayed. Reload it or open the video on YouTube.",
+              );
+            }
+          });
       });
     };
     const observer = new ResizeObserver(sync);
@@ -112,6 +147,7 @@ export default function YouTubeWatch({
     window.addEventListener("scroll", sync, true);
     sync();
     return () => {
+      canceled = true;
       cancelAnimationFrame(frame);
       observer.disconnect();
       window.removeEventListener("resize", sync);
@@ -172,7 +208,11 @@ export default function YouTubeWatch({
           </div>
         ) : (
           <p className="youtube-player-wait" role="status">
-            Official YouTube player · requires internet access
+            {!playerReady
+              ? "Loading the official YouTube player…"
+              : !nativeVisible
+                ? layoutHint
+                : "YouTube player opened."}
           </p>
         )}
       </div>
@@ -192,6 +232,16 @@ export default function YouTubeWatch({
           </p>
         </div>
         <div className="youtube-actions">
+          {loaded && (
+            <button
+              className="secondary-button"
+              aria-label="Reload YouTube player"
+              onClick={() => setRetry((value) => value + 1)}
+            >
+              <RefreshCw size={16} />
+              Reload player
+            </button>
+          )}
           <button
             className="secondary-button"
             disabled={busy || !api}
