@@ -71,8 +71,14 @@ async function nav(page, name) {
     .click();
 }
 async function pause(page) {
-  if (await page.getByRole("button", { name: "Pause", exact: true }).count())
+  const video = page.locator("video");
+  if (!(await video.count())) return;
+  // The media can start before React has changed the button label to Pause.
+  // Wait for the control instead of silently skipping this pause in that gap.
+  if (!(await video.evaluate((element) => element.paused)))
     await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect.poll(() => video.evaluate((element) => element.paused)).toBe(true);
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toBeVisible();
 }
 async function started(page, title) {
   await page.getByRole("heading", { name: title, exact: true }).waitFor();

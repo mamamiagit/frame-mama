@@ -21,7 +21,8 @@
     "test:playback": "node scripts/playback-smoke.mjs",
     "test:youtube": "node scripts/youtube-smoke.mjs",
     "test:organization": "node scripts/organization-smoke.mjs",
-    "test:downloads": "node scripts/downloads-smoke.mjs"
+    "test:downloads": "node scripts/downloads-smoke.mjs",
+    "verify:runtime": "powershell.exe -NoProfile -File scripts/verify-runtime.ps1"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -35,7 +36,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
-    "electron": "^45.2.3",
+    "electron": "44.10.2",
     "electron-builder": "^26.0.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.9.0",
