@@ -114,7 +114,9 @@ describe("persistent organization", () => {
     expect(() => org.add(playlist.id, local, "Overflow")).toThrow();
     expect(() => org.saveLocalLater(local.id, true)).toThrow();
     expect(org.localLaterCount()).toBe(500);
-  });
+    // This capacity test performs 1,000 durable SQLite writes. Allow for
+    // Windows filesystem/antivirus latency without relaxing its assertions.
+  }, process.platform === "win32" ? 15_000 : 5_000);
   it("persists mixed ordered playlists, deduplicates, rejects stale reorder, and deletes only membership", async () => {
     const state = await setup(),
       org = state.org,

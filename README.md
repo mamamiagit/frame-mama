@@ -17,6 +17,35 @@ For the renderer alone, use `npm run dev:web`. Desktop IPC is intentionally unav
 
 Behind the managed cloud environment proxy, use `NODE_USE_ENV_PROXY=1 npm ci` and `NODE_USE_ENV_PROXY=1 node node_modules/electron/install.js` to explicitly prepare Electron's lazily downloaded binary. On Windows PowerShell set `$env:NODE_USE_ENV_PROXY = '1'` before these commands if a proxy is configured. Keep inherited CA trust and TLS/checksum verification enabled. Direct installations need no proxy setting.
 
+## Windows Electron runtime verification
+
+Electron is pinned exactly to **44.10.2**, the current patch release on the supported 44.x line as of November 5, 2026. The previous 45.2.3 runtime's `ffmpeg.dll` was quarantined by Defender as `Trojan:Win32/Posilod.EB!cl`. Related false-positive reports exist upstream, but the quarantined copies have not been cleared by Microsoft. This pin uses a different official runtime; it does not restore, modify, or whitelist the flagged DLL. Electron supports its latest three stable major releases; monitor [release support](https://www.electronjs.org/docs/latest/tutorial/electron-timelines) and revisit the pin as supported updates become available.
+
+The official Windows x64 44.10.2 ZIP matched Electron's published SHA-256 checksum:
+
+```text
+7af18e85a1537b832924ae3b0e5146602f2f4f4b0c77c74e4ae0dc251ca338f9
+```
+
+Its `ffmpeg.dll` SHA-256 is:
+
+```text
+8ff05c15119391aa77fb62d666e70399b91e9a716fd5156946f811fa56d0e5f9
+```
+
+Defender scans of the official archive, extracted candidate, and installed runtime reported no threats on the development Windows machine with real-time protection enabled. This is a point-in-time result, not a guarantee of safety or future antivirus behavior.
+
+After installing dependencies on Windows x64, verify the runtime before launching Frame:
+
+```powershell
+node node_modules/electron/install.js
+npm run verify:runtime
+```
+
+The verifier fetches the checksum text from Electron's official GitHub release over HTTPS, checks the cached ZIP, compares every installed runtime file against that archive, and runs a Defender custom scan. It compares the runtime again afterward because Defender's successful exit code can also mean a threat was remediated. Missing, modified, unexpected, or quarantined runtime files fail verification. It requires Defender antivirus and real-time protection to remain enabled, and does not execute the runtime or change protection settings. If Defender access requires elevation, run the verifier from an administrator PowerShell. A JSON report is written to `test-results/runtime-verification.json`.
+
+For a nonstandard Electron cache, pass the official ZIP explicitly: `npm run verify:runtime -- -ArchivePath 'C:\path\electron-v44.10.2-win32-x64.zip'`. If verification fails or a new detection appears, leave the affected files quarantined and report the exact version, file hash and detection to Electron/Microsoft. Do not substitute DLLs from another release. No database, API-key store, media source, or user-data migration is part of this runtime change.
+
 ## Included now
 
 - Original Frame branding with six saved colorways (Grove, Ocean, Orchid, Rose, Ember, Graphite), each available in light or dark mode. Choose **Settings → Appearance → Colorway**. Existing light/dark preferences are preserved; new or invalid color choices default to Grove. Icons use scalable SVG vectors with larger navigation/player sizes and consistent strokes for high-DPI displays.
@@ -45,6 +74,7 @@ npm run test:playback  # real offline controls, captions, resume/restart, autopl
 npm run test:youtube   # controlled API/player responses; not a live Google/YouTube test
 npm run test:organization # playlists, settings, scans, cache, history and restart persistence
 npm run test:downloads # controlled media transfers, queue, cancel/retry, restart and library integration
+npm run verify:runtime # Windows x64: official archive/runtime hashes and Defender scan; no runtime execution
 npm audit
 ```
 
