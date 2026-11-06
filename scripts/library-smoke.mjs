@@ -1,4 +1,4 @@
-import { _electron as electron } from "@playwright/test";
+import { _electron as electron, expect } from "@playwright/test";
 import assert from "node:assert/strict";
 import {
   mkdtemp,
@@ -163,27 +163,42 @@ try {
     (await page.evaluate((q) => window.frame.library.list(q), query)).missing,
     0,
   );
-  // Native confirmation is mocked only by the test, not bypassed by the application.
-  await application.evaluate(({ dialog }) => {
-    dialog.showMessageBox = async () => ({
-      response: 0,
-      checkboxChecked: false,
-    });
-  });
+  // Exercise the real themed confirmation and main-process pending operation.
   const id = result.items.find((item) => item.title === "Weekend film #1").id;
-  assert.equal(
-    await page.evaluate((id) => window.frame.library.remove(id), id),
-    false,
-  );
-  await application.evaluate(({ dialog }) => {
-    dialog.showMessageBox = async () => ({
-      response: 1,
-      checkboxChecked: false,
-    });
-  });
+  const canceledRemoval = page.evaluate((id) => window.frame.library.remove(id), id);
+  const confirmation = page.getByRole("alertdialog", { name: "Remove from library?" });
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation.getByRole("button", { name: "Keep video", exact: true })).toBeFocused();
+  assert.equal(await page.evaluate(async () => {
+    try { await window.frame.confirmation.answer("wrong-token", true); return false; }
+    catch { return true; }
+  }), true);
+  await page.keyboard.press("Escape");
+  assert.equal(await canceledRemoval, false);
+  await expect(confirmation).toBeHidden();
+  const interruptedRemoval = page.evaluate((id) => window.frame.library.remove(id), id).catch(() => null);
+  await expect(confirmation).toBeVisible();
+  await page.reload();
+  await interruptedRemoval;
+  assert.equal(await page.evaluate(() => window.frame.confirmation.current()), null);
+  await page.waitForFunction(async () => !(await window.frame.library.list({ search: "", sort: "newest", offset: 0 })).busy);
+  assert.equal((await page.evaluate((q) => window.frame.library.list(q), query)).total, 3);
+  await page.getByRole("button", { name: "Offline Library", exact: true }).click();
   await page
     .getByRole("button", { name: "Remove Weekend film #1 from library" })
     .click();
+  await expect(confirmation).toBeVisible();
+  await page.evaluate(() => {
+    document.documentElement.dataset.colorway = "orchid";
+    document.documentElement.dataset.theme = "dark";
+  });
+  await expect(confirmation.getByRole("button", { name: "Remove from library", exact: true })).toHaveCSS("background-color", "rgb(203, 178, 255)");
+  await page.screenshot({ path: "test-results/library-confirmation-orchid.png" });
+  await page.keyboard.press("Tab");
+  await expect(confirmation.getByRole("button", { name: "Remove from library", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(confirmation.getByRole("button", { name: "Close dialog", exact: true })).toBeFocused();
+  await confirmation.getByRole("button", { name: "Remove from library", exact: true }).click();
   await page
     .getByText("Library entry removed. Your original file was kept.")
     .waitFor();

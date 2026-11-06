@@ -19,6 +19,7 @@ import type {
 } from "../electron/youtube-types.cjs";
 import type { OrganizationAPI } from "../electron/organization-types.cjs";
 import type { DownloadAPI } from "../electron/download-types.cjs";
+import type { ConfirmationAPI } from "../electron/confirmation-types.cjs";
 export type ImportProgress = { completed: number; total: number } | null;
 declare global {
   interface Window {
@@ -27,6 +28,7 @@ declare global {
       openYouTube: () => Promise<void>;
       organization: OrganizationAPI;
       downloads: DownloadAPI;
+      confirmation: ConfirmationAPI;
       youtube: {
         status: () => Promise<YouTubeStatus>;
         importKey: () => Promise<YouTubeStatus>;

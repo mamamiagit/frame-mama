@@ -43,6 +43,7 @@ import type { PlaylistDetail } from "../electron/organization-types.cjs";
 import type { YouTubeVideo } from "../electron/youtube-types.cjs";
 import OfflineLibrary from "./components/OfflineLibrary";
 import DownloadsPage from "./components/DownloadsPage";
+import ConfirmationDialog from "./components/ConfirmationDialog";
 
 const navigation = [
   { name: "Home", icon: Home },
@@ -177,6 +178,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.key !== "Escape" && event.target instanceof Element && event.target.closest('[role="dialog"],[role="alertdialog"]'))) return;
       if (event.key === "Escape") {
         setAbout(false);
         setSelected(null);
@@ -760,6 +762,7 @@ export default function App() {
           </>
         )}
       </main>
+      <ConfirmationDialog />
       {notice && (
         <div className="toast" role="status">
           {notice}
