@@ -1,0 +1,25 @@
+.collection-modal.confirmation-modal {
+  width: min(480px, 100%);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  box-shadow: 0 24px 80px #0006;
+}
+.confirmation-symbol {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  margin: 22px 0 16px;
+  color: var(--accent);
+  background: var(--surface2);
+}
+.confirmation-description {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.confirmation-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.confirmation-actions button { min-height: 40px; }
+.confirmation-error { color: var(--text); font-size: 13px; margin-top: 12px; }
+@media (max-width: 480px) { .confirmation-actions { flex-direction: column; } .confirmation-actions button { width: 100%; justify-content: center; } }

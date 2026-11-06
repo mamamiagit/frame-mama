@@ -13,10 +13,12 @@ import { fallbackVideo } from "./youtube.cjs";
 import type { SavedYouTube } from "./youtube-saved.cjs";
 import type { MetadataExtractor } from "./metadata.cjs";
 import { scanFolder } from "./folder-scan.cjs";
+import type { ConfirmationSpec } from "./confirmation-types.cjs";
 
 export function installOrganizationIpc(deps: {
   window: () => BrowserWindow | null;
   trusted: (event: Electron.IpcMainInvokeEvent) => void;
+  confirm: (spec: ConfirmationSpec) => Promise<boolean>;
   library: Library;
   organization: Organization;
   youtube: YouTube;
@@ -62,23 +64,8 @@ export function installOrganizationIpc(deps: {
       youtube: { ...video, description: "" },
     };
   };
-  async function confirm(title: string, detail: string) {
-    const window = deps.window();
-    if (!window) return false;
-    return (
-      (
-        await dialog.showMessageBox(window, {
-          type: "question",
-          title,
-          message: title,
-          detail,
-          buttons: ["Cancel", "Confirm"],
-          defaultId: 0,
-          cancelId: 0,
-          noLink: true,
-        })
-      ).response === 1
-    );
+  function confirm(title: string, description: string, confirmLabel: string) {
+    return deps.confirm({ title, description, confirmLabel, cancelLabel: "Cancel" });
   }
   handle("list", () => org.list());
   handle("create", (name: unknown) => org.create(name));
@@ -89,6 +76,7 @@ export function installOrganizationIpc(deps: {
       !(await confirm(
         `Delete “${playlist.name}”?`,
         "Only the playlist is removed. Videos, saved links, and original files are kept.",
+        "Delete playlist",
       ))
     )
       return false;
@@ -153,6 +141,7 @@ export function installOrganizationIpc(deps: {
       !(await confirm(
         "Clear history and resume positions?",
         "Local watch history, resume positions, and YouTube visit history will be removed. Playlists and original files are kept.",
+        "Clear history",
       ))
     )
       return false;
@@ -241,6 +230,7 @@ export function installOrganizationIpc(deps: {
       !(await confirm(
         "Clear cached thumbnails?",
         "Original videos and metadata stay in your library. Use Rebuild previews afterward to regenerate the cache.",
+        "Clear previews",
       ))
     )
       return null;

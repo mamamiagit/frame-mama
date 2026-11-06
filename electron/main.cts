@@ -22,6 +22,7 @@ import { YouTubePlayer } from "./youtube-player.cjs";
 import { Organization } from "./organization.cjs";
 import { installOrganizationIpc } from "./organization-ipc.cjs";
 import { Downloads } from "./downloads.cjs";
+import { Confirmations } from "./confirmations.cjs";
 import { pathToFileURL } from "node:url";
 
 protocol.registerSchemesAsPrivileged([
@@ -68,6 +69,9 @@ let youtubeCredentials: YouTubeCredentials;
 let downloads: Downloads;
 let busy = false;
 let progress: { completed: number; total: number } | null = null;
+const confirmations = new Confirmations(request => {
+  if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send("confirmation:changed", request);
+});
 function notifyProgress() {
   if (window && !window.isDestroyed())
     window.webContents.send("library:progress", progress);
@@ -109,10 +113,14 @@ function createWindow() {
     },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("render-process-gone", () => confirmations.cancel());
   window.webContents.on(
     "did-start-navigation",
     (_event, _url, _inPlace, isMainFrame) => {
-      if (isMainFrame) youtubePlayer?.dispose();
+      if (isMainFrame) {
+        confirmations.cancel();
+        youtubePlayer?.dispose();
+      }
     },
   );
   window.webContents.on("will-navigate", (event, url) => {
@@ -131,6 +139,7 @@ function createWindow() {
   if (devUrl) void window.loadURL(devUrl);
   else void window.loadFile(path.join(__dirname, "../dist/index.html"));
   window.on("closed", () => {
+    confirmations.cancel();
     youtubePlayer?.dispose();
     window = null;
     extractor?.dispose();
@@ -323,6 +332,7 @@ app
     installOrganizationIpc({
       window: () => window,
       trusted: trustedSender,
+      confirm: spec => window && !window.isDestroyed() ? confirmations.ask(spec) : Promise.resolve(false),
       library,
       organization,
       youtube,
@@ -455,24 +465,27 @@ app
       if (!library.getSource(id)) return false;
       busy = true;
       try {
-        const answer = await dialog.showMessageBox(window!, {
-          type: "question",
+        const answer = await confirmations.ask({
           title: "Remove from library?",
-          message: "Remove this video from your Frame library?",
-          detail:
-            "The original video file will stay on your computer. Only the library entry and its cached thumbnail will be removed.",
-          buttons: ["Keep video", "Remove from library"],
-          defaultId: 0,
-          cancelId: 0,
-          noLink: true,
+          description: `Remove “${library.getVideo(id)!.title}” from your Frame library? Your original video file will stay on your computer. Only the library entry and its cached thumbnail will be removed.`,
+          cancelLabel: "Keep video",
+          confirmLabel: "Remove from library",
         });
-        if (answer.response !== 1) return false;
+        if (!answer) return false;
         await library.remove(id);
         return true;
       } finally {
         busy = false;
         notifyProgress();
       }
+    });
+    ipcMain.handle("confirmation:current", event => {
+      trustedSender(event);
+      return confirmations.current();
+    });
+    ipcMain.handle("confirmation:answer", (event, id: unknown, accepted: unknown) => {
+      trustedSender(event);
+      confirmations.answer(id, accepted);
     });
     ipcMain.handle("frame:info", (event) => {
       trustedSender(event);

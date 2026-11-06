@@ -57,13 +57,11 @@ async function choose(filePaths) {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: paths });
   }, filePaths);
 }
-async function confirm(response) {
-  await application.evaluate(({ dialog }, value) => {
-    dialog.showMessageBox = async () => ({
-      response: value,
-      checkboxChecked: false,
-    });
-  }, response);
+async function confirm(page, response) {
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  await dialog.locator(response === 1 ? "[data-confirm-action]" : "[data-autofocus]").click();
+  await dialog.waitFor({ state: "hidden" });
 }
 async function nav(page, name) {
   await page
@@ -294,8 +292,8 @@ try {
     .toBe(folder);
   const before = await page.evaluate(() => window.frame.organization.storage());
   assert.equal(before.thumbnailCount, 2);
-  await confirm(0);
   await nav(page, "Clear previews");
+  await confirm(page, 0);
   await page
     .getByRole("button", { name: "Clear previews", exact: true })
     .waitFor({ state: "visible" });
@@ -303,8 +301,8 @@ try {
     async () =>
       (await window.frame.organization.storage()).thumbnailCount === 2,
   );
-  await confirm(1);
   await nav(page, "Clear previews");
+  await confirm(page, 1);
   await page
     .getByText("2 previews cleared · 0 could not be cleared.", { exact: true })
     .waitFor();
@@ -453,6 +451,7 @@ try {
     .getByRole("checkbox", { name: "Record history", exact: true })
     .check();
   await nav(page, "Clear all history");
+  await confirm(page, 1);
   await page.waitForFunction(
     async () => (await window.frame.playback.history(0)).total === 0,
   );
@@ -526,14 +525,14 @@ try {
     1,
   );
   await playlist(page);
-  await confirm(0);
   await nav(page, "Delete playlist");
+  await confirm(page, 0);
   assert.equal(
     (await page.evaluate(() => window.frame.organization.list())).length,
     1,
   );
-  await confirm(1);
   await nav(page, "Delete playlist");
+  await confirm(page, 1);
   await page
     .getByRole("heading", { name: "A place for every mood." })
     .waitFor();

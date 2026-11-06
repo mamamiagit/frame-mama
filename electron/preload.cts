@@ -6,6 +6,7 @@ import type {
 import type { YouTubeQuery, EmbedBounds } from "./youtube-types.cjs";
 import type { PlaybackProgress } from "./playback-types.cjs";
 import type { LibraryQuery } from "./library-types.cjs";
+import type { ConfirmationRequest } from "./confirmation-types.cjs";
 import { contextBridge, ipcRenderer } from "electron";
 
 // Fixed capabilities only: no arbitrary channels, URLs, paths, or Node APIs.
@@ -14,6 +15,15 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     getAppInfo: () => ipcRenderer.invoke("frame:info"),
     openYouTube: () => ipcRenderer.invoke("frame:youtube-home"),
+    confirmation: Object.freeze({
+      current: () => ipcRenderer.invoke("confirmation:current"),
+      answer: (id: string, accepted: boolean) => ipcRenderer.invoke("confirmation:answer", id, accepted),
+      onChange: (callback: (request: ConfirmationRequest | null) => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, request: ConfirmationRequest | null) => callback(request);
+        ipcRenderer.on("confirmation:changed", listener);
+        return () => ipcRenderer.removeListener("confirmation:changed", listener);
+      },
+    }),
     downloads: Object.freeze({
       list: () => ipcRenderer.invoke("downloads:list"),
       add: (value: { url: string; authorized: boolean }) => ipcRenderer.invoke("downloads:add", value),

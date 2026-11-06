@@ -30,6 +30,7 @@ try {
   }));
   assert.equal(bridge.info.version, "0.1.0");
   assert.deepEqual(bridge.keys, [
+    "confirmation",
     "downloads",
     "getAppInfo",
     "library",

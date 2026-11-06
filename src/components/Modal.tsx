@@ -4,10 +4,16 @@ export default function Modal({
   title,
   onClose,
   children,
+  role = "dialog",
+  descriptionId,
+  className = "",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  role?: "dialog" | "alertdialog";
+  descriptionId?: string;
+  className?: string;
 }) {
   const root = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -20,11 +26,12 @@ export default function Modal({
         ) || [],
       );
     (
-      root.current?.querySelector<HTMLElement>("input,select") || controls()[0]
+      root.current?.querySelector<HTMLElement>("[data-autofocus],input,select") || controls()[0]
     )?.focus();
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
       }
       if (event.key === "Tab") {
@@ -56,10 +63,11 @@ export default function Modal({
     >
       <section
         ref={root}
-        className="collection-modal"
-        role="dialog"
+        className={`collection-modal ${className}`}
+        role={role}
         aria-modal="true"
         aria-label={title}
+        aria-describedby={descriptionId}
       >
         <div className="collection-modal-heading">
           <h2>{title}</h2>
